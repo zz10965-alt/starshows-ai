@@ -1,0 +1,2648 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>星演 StarShow · AI 观演规划 Agent</title>
+<style>
+  :root {
+    --pink: #ff6b9d;
+    --violet: #a06bff;
+    --yellow: #ffc94d;
+    --mint: #3fd0a8;
+    --sky: #5cb8ff;
+    --coral: #ff8a5c;
+    --ink: #3a2e45;
+    --ink-soft: #7a6f8a;
+    --bg1: #fff4f6;
+    --bg2: #fff8e8;
+    --bg3: #eef4ff;
+    --card: #ffffff;
+    --line: #f0e6ee;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: var(--ink);
+    background: linear-gradient(135deg, var(--bg1) 0%, var(--bg2) 45%, var(--bg3) 100%);
+    overflow: hidden;
+    position: relative;
+  }
+  .stickers { position: fixed; inset: 0; pointer-events: none; z-index: 0; }
+  .sticker { position: absolute; font-size: 24px; opacity: .20; animation: floaty 8s ease-in-out infinite; }
+  @keyframes floaty { 0%,100% { transform: translateY(0) rotate(-4deg); } 50% { transform: translateY(-16px) rotate(6deg); } }
+
+  .app { position: relative; z-index: 1; height: 100%; display: flex; flex-direction: column; }
+
+  header { padding: 14px 22px 10px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .logo {
+    width: 46px; height: 46px; border-radius: 15px;
+    background: linear-gradient(135deg, var(--pink), var(--violet));
+    display: flex; align-items: center; justify-content: center; font-size: 24px;
+    box-shadow: 0 6px 18px rgba(255,107,157,.35);
+  }
+  .brand { line-height: 1.2; }
+  .brand .t { font-size: 18px; font-weight: 800; letter-spacing: .5px; }
+  .brand .t .hl { background: linear-gradient(90deg, var(--pink), var(--violet)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+  .brand .s { font-size: 12px; color: var(--ink-soft); }
+  .demo-badge { font-size: 11px; color: var(--violet); background: #f3edff; padding: 5px 11px; border-radius: 999px; font-weight: 600; }
+
+  .tabs { display: flex; gap: 6px; margin-left: auto; background: rgba(255,255,255,.7); padding: 6px; border-radius: 999px; box-shadow: 0 4px 16px rgba(160,107,255,.10); }
+  .tab {
+    display: flex; align-items: center; gap: 6px; padding: 8px 15px; border-radius: 999px;
+    font-size: 14px; color: var(--ink-soft); cursor: pointer; transition: all .2s; white-space: nowrap;
+  }
+  .tab.active { background: linear-gradient(135deg, var(--pink), var(--violet)); color: #fff; font-weight: 700; box-shadow: 0 4px 14px rgba(255,107,157,.4); }
+
+  #view { flex: 1; min-height: 0; padding: 0 22px 20px; display: flex; }
+  .cols { flex: 1; min-height: 0; display: grid; gap: 16px; }
+  .home-cols { grid-template-columns: 250px 1fr 340px; }
+  .chat-cols { grid-template-columns: 250px 1fr; }
+
+  .card { background: var(--card); border-radius: 20px; box-shadow: 0 8px 30px rgba(122,95,160,.10); overflow: hidden; display: flex; flex-direction: column; }
+
+  /* 左栏：画像卡 */
+  .profile, .chat-side, .trip-panel, .rec-panel { padding: 18px 16px; overflow-y: auto; }
+  .pf-head { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+  .avatar {
+    width: 50px; height: 50px; border-radius: 50%; flex: none;
+    background: linear-gradient(135deg, var(--yellow), var(--coral));
+    display: flex; align-items: center; justify-content: center; font-size: 26px;
+    animation: pulse 2.4s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(255,201,77,.45); } 50% { box-shadow: 0 0 0 9px rgba(255,201,77,0); } }
+  .pf-head .t { font-weight: 800; font-size: 15px; }
+  .pf-head .s { font-size: 11px; color: var(--ink-soft); }
+  .pf-edit { margin-left: auto; font-size: 11px; padding: 4px 10px; border-radius: 999px; border: 1.5px solid var(--violet); color: var(--violet); background: #fff; cursor: pointer; font-weight: 700; }
+  .pf-progress { height: 6px; background: #f2e9f4; border-radius: 6px; margin: 12px 0 14px; overflow: hidden; }
+  .pf-progress i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--mint), var(--sky)); border-radius: 6px; transition: width .5s ease; }
+  .pf-tags { display: flex; flex-direction: column; gap: 10px; }
+  .pf-tag {
+    display: flex; align-items: center; gap: 9px; padding: 10px 12px; border-radius: 14px;
+    background: #faf4fb; border: 1.5px dashed #eadcee; color: var(--ink-soft); font-size: 13px;
+    transition: all .3s;
+  }
+  .pf-tag .em { font-size: 18px; }
+  .pf-tag .lab { color: var(--ink-soft); }
+  .pf-tag .val { font-weight: 700; color: var(--ink); }
+  .pf-tag.filled { border-style: solid; border-color: transparent; background: linear-gradient(135deg, #fff0f5, #f0edff); color: var(--ink); animation: pop .4s ease; }
+  .pf-tag.filled .val { color: var(--pink); }
+  @keyframes pop { 0% { transform: scale(.9); opacity: .3; } 60% { transform: scale(1.04); } 100% { transform: scale(1); opacity: 1; } }
+  .pf-foot { margin-top: 14px; font-size: 11px; color: var(--ink-soft); line-height: 1.6; }
+
+  .rec-head, .trip-head { font-weight: 800; font-size: 15px; margin-bottom: 12px; }
+
+  .concert-card { padding: 15px; border-radius: 16px; border: 1.5px solid var(--line); margin-bottom: 12px; cursor: pointer; transition: all .18s; background: #fff; }
+  .concert-card:hover { border-color: var(--violet); transform: translateY(-2px); box-shadow: 0 8px 20px rgba(160,107,255,.18); }
+  .concert-card .row1 { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .concert-card .art { font-size: 16px; font-weight: 800; }
+  .concert-card .tag { font-size: 11px; padding: 3px 9px; border-radius: 999px; background: #fff0f5; color: var(--pink); font-weight: 700; }
+  .concert-card .meta { font-size: 12.5px; color: var(--ink-soft); margin-top: 6px; line-height: 1.6; }
+  .concert-card .go { margin-top: 10px; font-size: 12.5px; font-weight: 700; color: var(--violet); }
+
+  .trip-card { padding: 13px 14px; border-radius: 14px; border: 1.5px solid var(--line); margin-bottom: 10px; cursor: pointer; transition: all .18s; background: #fff; }
+  .trip-card:hover { border-color: var(--pink); }
+  .trip-card .t1 { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 13.5px; flex-wrap: wrap; }
+  .trip-card .t2 { font-size: 12px; color: var(--ink-soft); margin-top: 5px; line-height: 1.6; }
+  .trip-days { font-size: 11px; padding: 2px 9px; border-radius: 999px; background: #fff0f5; color: var(--pink); font-weight: 700; }
+  .trip-x { flex: none; margin-left: auto; width: 24px; height: 24px; border-radius: 50%; border: none; background: #f3ecf7; color: var(--ink-soft); font-size: 13px; cursor: pointer; line-height: 1; }
+  .trip-x:hover { background: #ffe2e2; color: #d33; }
+  .plan-bar { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .plan-bar .bar { flex: 1; height: 7px; border-radius: 7px; background: #eee4f1; overflow: hidden; }
+  .plan-bar .bar i { display: block; height: 100%; border-radius: 7px; background: linear-gradient(90deg, var(--mint), var(--sky)); }
+  .plan-bar span { font-size: 11px; color: var(--ink-soft); font-weight: 700; }
+  .plan-next { font-size: 11.5px; color: var(--violet); margin-top: 6px; font-weight: 700; }
+
+  /* 状态 pill */
+  .spill { display: inline-flex; align-items: center; padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; background: #f3edff; color: var(--violet); cursor: pointer; transition: all .15s; white-space: nowrap; }
+  .spill.on { background: linear-gradient(135deg, var(--pink), var(--violet)); color: #fff; }
+  .spill.mini { font-size: 11px; padding: 2px 9px; cursor: default; }
+  .spill.big { font-size: 13px; padding: 8px 16px; }
+  .status-pills { display: flex; gap: 7px; flex-wrap: wrap; }
+  .status-pills.big { gap: 10px; }
+
+  /* 问卷 */
+  .quest { max-width: 780px; margin: 0 auto; width: 100%; padding: 28px 30px; background: var(--card); border-radius: 20px; box-shadow: 0 8px 30px rgba(122,95,160,.10); overflow-y: auto; }
+  .quest h2 { font-size: 20px; margin-bottom: 4px; }
+  .quest .sub { color: var(--ink-soft); font-size: 13px; margin-bottom: 20px; }
+  .q-step { margin-bottom: 20px; }
+  .q-lab { font-size: 14px; font-weight: 800; margin-bottom: 10px; }
+  .q-lab small { color: var(--ink-soft); font-weight: 600; font-size: 11px; margin-left: 4px; }
+  .opt-grid { display: flex; flex-wrap: wrap; gap: 9px; }
+  .opt-card { padding: 10px 16px; border-radius: 14px; border: 1.5px solid var(--line); background: #faf6fc; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--ink-soft); transition: all .18s; }
+  .opt-card:hover { border-color: var(--violet); }
+  .opt-card.on { background: linear-gradient(135deg, var(--pink), var(--violet)); color: #fff; border-color: transparent; box-shadow: 0 4px 12px rgba(255,107,157,.35); }
+  .quest .foot { display: flex; align-items: center; gap: 14px; margin-top: 8px; }
+  .quest .prog { flex: 1; height: 8px; background: #f2e9f4; border-radius: 8px; overflow: hidden; }
+  .quest .prog i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--mint), var(--sky)); border-radius: 8px; transition: width .4s ease; }
+  .quest .btn-big { width: auto; padding: 11px 28px; }
+
+  /* 详情页 */
+  .detail-top { display: flex; align-items: flex-start; gap: 12px; padding: 0 2px 16px; }
+  .detail-top .dt-main { flex: 1; min-width: 0; }
+  .detail-top .dt-title { font-size: 16px; font-weight: 800; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .detail-top .dt-emoji { font-size: 18px; }
+  .detail-top .dt-tour { font-size: 13px; font-weight: 700; color: var(--violet); }
+  .detail-top .dt-meta { font-size: 13px; color: var(--ink-soft); margin-top: 6px; }
+  .back { padding: 7px 13px; border-radius: 999px; border: 1.5px solid var(--violet); color: var(--violet); background: #fff; font-weight: 700; cursor: pointer; font-size: 12.5px; flex: none; }
+  .watch-btn { padding: 8px 15px; border-radius: 999px; border: none; background: linear-gradient(135deg, var(--pink), var(--violet)); color: #fff; font-weight: 700; cursor: pointer; font-size: 12.5px; flex: none; box-shadow: 0 4px 14px rgba(255,107,157,.35); }
+  .watch-btn:hover { box-shadow: 0 8px 20px rgba(255,107,157,.45); }
+
+  .seat-panel, .host-panel { overflow-y: auto; }
+  .panel-head { padding: 15px 18px 12px; font-weight: 800; font-size: 15px; border-bottom: 1px solid var(--line); }
+  .seat-body, .host-body { padding: 16px; }
+
+  .pref-switch { display: flex; gap: 8px; margin-bottom: 14px; }
+  .pref-btn { flex: 1; padding: 9px 4px; border-radius: 12px; border: 1.5px solid var(--line); background: #fff; cursor: pointer; font-size: 12.5px; font-weight: 700; color: var(--ink-soft); transition: all .18s; }
+  .pref-btn.on { background: linear-gradient(135deg, var(--pink), var(--violet)); color: #fff; border-color: transparent; box-shadow: 0 4px 12px rgba(255,107,157,.35); }
+
+  .rec-card { padding: 15px; border-radius: 16px; background: linear-gradient(135deg, #fff0f5, #f0edff); border: 1.5px solid #f4d9ec; margin-bottom: 14px; animation: up .4s ease; }
+  .rec-card.alt { background: #faf6fc; border-color: var(--line); }
+  .rec-card .lbl { font-size: 11px; font-weight: 800; color: var(--violet); letter-spacing: .5px; }
+  .rec-card .name { font-size: 17px; font-weight: 800; margin: 4px 0 2px; }
+  .rec-card .price { font-size: 20px; font-weight: 800; color: var(--pink); }
+  .rec-card .reason { font-size: 13px; color: var(--ink); line-height: 1.6; margin-top: 8px; }
+  .rec-card .upg { font-size: 12px; color: var(--coral); margin-top: 8px; line-height: 1.5; }
+
+  .tier-row { padding: 11px 12px; border-radius: 13px; margin-bottom: 8px; background: #faf6fc; border: 1.5px solid transparent; cursor: pointer; transition: all .18s; }
+  .tier-row.rec { border-color: var(--pink); background: #fff5f9; }
+  .tier-row.preview { border-color: var(--violet); background: #f6f1ff; }
+  .tier-row .t1 { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; flex-wrap: wrap; }
+  .tier-row .tname { font-weight: 700; font-size: 13.5px; }
+  .tier-row .tprice { margin-left: auto; font-weight: 800; color: var(--pink); font-size: 13.5px; }
+  .badge { font-size: 10px; padding: 2px 8px; border-radius: 999px; background: var(--pink); color: #fff; font-weight: 800; }
+  .bar-line { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--ink-soft); margin-bottom: 3px; }
+  .bar-line .bl { width: 34px; flex: none; }
+  .bar-line .bar { flex: 1; height: 7px; border-radius: 7px; background: #eee4f1; overflow: hidden; }
+  .bar-line .bar i { display: block; height: 100%; border-radius: 7px; }
+  .bar-line .bv { width: 20px; flex: none; text-align: right; color: var(--ink); font-weight: 700; }
+  .view-caption { font-size: 12.5px; color: var(--ink-soft); line-height: 1.6; margin: 10px 2px 4px; padding: 9px 12px; border-radius: 11px; background: #faf6fc; }
+
+  .checklist { display: flex; flex-direction: column; gap: 9px; }
+  .check { display: flex; align-items: flex-start; gap: 10px; padding: 11px 12px; border-radius: 13px; background: #faf6fc; cursor: pointer; transition: all .18s; }
+  .check:hover { background: #f3ecf7; }
+  .check input { margin-top: 2px; width: 17px; height: 17px; accent-color: var(--mint); cursor: pointer; }
+  .check .ct { font-size: 13.5px; line-height: 1.5; }
+  .check .ct small { display: block; color: var(--ink-soft); font-size: 11.5px; margin-top: 1px; }
+  .check.done { background: #effaf6; }
+  .check.done .ct { color: var(--ink-soft); text-decoration: line-through; }
+
+  .sec-item { display: flex; gap: 10px; padding: 9px 12px; border-radius: 12px; background: #faf6fc; margin-bottom: 7px; font-size: 12.5px; line-height: 1.5; }
+  .sec-item.ok { background: #effaf6; }
+  .sec-item.no { background: #fff0f0; }
+  .sec-item .em { font-size: 15px; flex: none; }
+
+  .hotel-card { padding: 12px 13px; border-radius: 13px; border: 1.5px solid var(--line); margin-bottom: 9px; }
+  .hotel-card .n { font-weight: 700; font-size: 13.5px; }
+  .hotel-card .d { font-size: 12px; color: var(--ink-soft); margin-top: 4px; line-height: 1.5; }
+
+  .host-sec { border-bottom: 1px solid var(--line); }
+  .host-sec:last-child { border-bottom: none; }
+  .sec-head { display: flex; align-items: center; gap: 8px; padding: 13px 4px; font-size: 13.5px; font-weight: 800; color: var(--ink); cursor: pointer; user-select: none; }
+  .sec-head:hover { color: var(--violet); }
+  .sec-caret { color: var(--violet); font-size: 13px; width: 12px; flex: none; }
+  .sec-body { padding: 2px 4px 14px; }
+  .transport-card { padding: 12px 13px; border-radius: 13px; border: 1.5px solid var(--line); margin-bottom: 9px; }
+  .transport-card .n { font-weight: 700; font-size: 13.5px; }
+  .transport-card .d { font-size: 12px; color: var(--pink); font-weight: 700; }
+  .transport-card .tip { font-size: 12px; color: var(--ink-soft); margin-top: 4px; line-height: 1.5; }
+
+  .copy-card { padding: 14px; border-radius: 15px; background: #faf6fc; margin-bottom: 12px; }
+  .copy-card .h { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 13.5px; margin-bottom: 8px; }
+  .copy-card .txt { font-size: 13px; line-height: 1.65; color: var(--ink); background: #fff; padding: 11px 12px; border-radius: 11px; border: 1px solid var(--line); }
+  .copy-card .btn-copy { margin-top: 9px; padding: 7px 14px; border: none; border-radius: 10px; background: var(--violet); color: #fff; font-size: 12px; font-weight: 700; cursor: pointer; transition: all .15s; }
+  .copy-card .btn-copy:hover { background: var(--pink); }
+
+  .lbl { font-size: 11px; font-weight: 800; color: var(--violet); letter-spacing: .5px; margin: 16px 0 10px; }
+  .empty-hint { text-align: center; color: var(--ink-soft); font-size: 13px; padding: 30px 10px; line-height: 1.7; }
+  .empty-hint .em { font-size: 42px; display: block; margin-bottom: 10px; }
+
+  /* 详情三模式 + 收藏 + 社群 */
+  .detail-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .detail-tabs { display: flex; gap: 8px; margin: 0 2px 14px; }
+  #detailMain { flex: 1; min-height: 0; overflow-y: auto; }
+  .fav-btn { padding: 8px 14px; border-radius: 999px; border: 1.5px solid var(--yellow); color: #b8860b; background: #fffaf0; font-weight: 700; cursor: pointer; font-size: 12.5px; flex: none; transition: all .18s; }
+  .fav-btn:hover { background: var(--yellow); color: #fff; border-color: var(--yellow); }
+
+  .card-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .mini-btn { padding: 6px 13px; border-radius: 999px; border: 1.5px solid var(--line); background: #fff; color: var(--ink-soft); font-size: 12px; font-weight: 700; cursor: pointer; transition: all .15s; }
+  .mini-btn:hover { border-color: var(--violet); color: var(--violet); }
+  .mini-btn.primary { background: linear-gradient(135deg, var(--pink), var(--violet)); color: #fff; border-color: transparent; }
+  .mini-btn.primary:hover { color: #fff; }
+  .mini-btn.primary.on { background: #fff; color: var(--violet); border: 1.5px solid var(--violet); }
+  .mini-btn.on { background: var(--yellow); color: #fff; border-color: var(--yellow); }
+  .mini-btn.danger { color: #d33; }
+  .mini-btn.danger:hover { background: #ffe2e2; border-color: #f5b5b5; color: #d33; }
+
+  .fav-sec { margin-top: 18px; border-top: 1px solid var(--line); }
+  .fav-row { display: flex; align-items: center; gap: 8px; padding: 9px 2px; border-bottom: 1px dashed var(--line); flex-wrap: wrap; }
+  .fav-row:last-child { border-bottom: none; }
+  .fav-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 13px; }
+  .fav-btns { display: flex; gap: 6px; flex: none; }
+
+  .hotel-group { padding: 12px 13px; border-radius: 14px; border: 1.5px solid var(--line); margin-bottom: 10px; background: #fff; }
+  .hg-head { display: flex; align-items: center; gap: 6px; font-size: 13.5px; }
+  .hg-head .em { font-size: 18px; }
+  .hg-head .cnt { margin-left: auto; font-size: 11px; font-weight: 800; color: var(--pink); background: #fff0f5; padding: 2px 9px; border-radius: 999px; }
+  .hg-sub { font-size: 12px; color: var(--ink-soft); margin-top: 4px; line-height: 1.5; }
+  .hg-items { margin-top: 8px; display: flex; flex-direction: column; gap: 5px; margin-bottom: 9px; }
+  .hg-item { font-size: 12px; color: var(--ink); padding: 6px 9px; border-radius: 9px; background: #faf6fc; }
+
+  .community { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .com-head { display: flex; align-items: center; gap: 10px; }
+  .com-head > span { font-size: 30px; }
+  .com-head b { font-size: 14px; }
+  .com-head .s { font-size: 11.5px; color: var(--ink-soft); margin-top: 2px; }
+  .shard { font-size: 12px; color: var(--violet); background: #f3edff; padding: 9px 13px; border-radius: 11px; line-height: 1.5; }
+  .chans { display: flex; gap: 7px; overflow-x: auto; padding-bottom: 2px; }
+  .chan-chip { flex: none; padding: 7px 14px; border-radius: 999px; border: 1.5px solid var(--line); background: #fff; color: var(--ink-soft); font-size: 12.5px; font-weight: 700; cursor: pointer; transition: all .15s; }
+  .chan-chip.on { background: linear-gradient(135deg, var(--pink), var(--violet)); color: #fff; border-color: transparent; }
+  .cmsgs { min-height: 220px; max-height: 340px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 4px 2px; }
+  .cmsg { display: flex; gap: 9px; }
+  .cava { width: 34px; height: 34px; border-radius: 50%; flex: none; background: #f6f0fb; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+  .cmain { min-width: 0; }
+  .cmeta { display: flex; align-items: center; gap: 7px; font-size: 11px; flex-wrap: wrap; }
+  .cmeta b { font-size: 12.5px; color: var(--ink); }
+  .cmeta span { color: var(--ink-soft); }
+  .cmeta .ct { margin-left: auto; color: #b9aec4; }
+  .cbubble { margin-top: 4px; padding: 9px 13px; border-radius: 14px; background: #faf6fc; border: 1px solid var(--line); font-size: 13px; line-height: 1.55; border-top-left-radius: 4px; }
+  .warn { font-size: 11.5px; color: #b8860b; background: #fff8e1; padding: 9px 13px; border-radius: 11px; line-height: 1.5; }
+  .cinput { display: flex; gap: 8px; }
+  .cinput input { flex: 1; min-width: 0; padding: 11px 15px; border-radius: 999px; border: 1.5px solid var(--line); font-size: 13.5px; outline: none; background: #fff; color: var(--ink); }
+  .cinput input:focus { border-color: var(--violet); }
+  .cinput button { width: 44px; height: 44px; flex: none; border-radius: 50%; border: none; background: linear-gradient(135deg, var(--pink), var(--violet)); color: #fff; font-size: 17px; cursor: pointer; transition: all .18s; }
+  .cinput button:hover { transform: translateY(-2px); box-shadow: 0 6px 14px rgba(255,107,157,.4); }
+
+  /* 聊天 */
+  .chat { background: rgba(255,255,255,.72); backdrop-filter: blur(6px); }
+  .chat-title { padding: 14px 18px 10px; font-size: 12px; color: var(--ink-soft); letter-spacing: .5px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 7px; }
+  .chat-title .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--mint); box-shadow: 0 0 0 3px rgba(63,208,168,.2); flex: none; }
+  .msgs { flex: 1; overflow-y: auto; padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+  .msg { display: flex; gap: 9px; max-width: 84%; animation: up .35s ease; }
+  @keyframes up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .msg .ava { width: 32px; height: 32px; border-radius: 11px; flex: none; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+  .msg.bot .ava { background: linear-gradient(135deg, var(--pink), var(--violet)); }
+  .msg.user { margin-left: auto; flex-direction: row-reverse; }
+  .msg.user .ava { background: linear-gradient(135deg, var(--sky), var(--mint)); }
+  .msg .bubble { padding: 11px 14px; border-radius: 16px; font-size: 14px; line-height: 1.55; }
+  .msg.bot .bubble { background: #fff; border: 1px solid var(--line); border-top-left-radius: 5px; box-shadow: 0 3px 12px rgba(122,95,160,.08); }
+  .msg.user .bubble { background: linear-gradient(135deg, var(--sky), var(--mint)); color: #fff; border-top-right-radius: 5px; box-shadow: 0 3px 12px rgba(92,184,255,.3); }
+  #chips { padding: 4px 18px 14px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    padding: 9px 15px; border-radius: 999px; border: 1.5px solid var(--violet); color: var(--violet);
+    background: #fff; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .18s; animation: up .3s ease;
+  }
+  .chip:hover { background: var(--violet); color: #fff; transform: translateY(-2px); box-shadow: 0 6px 14px rgba(160,107,255,.3); }
+  .action-bar { padding: 4px 18px 16px; }
+  .action-row { display: flex; gap: 8px; }
+  .action-row .btn-big { flex: 1; animation: up .3s ease; }
+  .btn-big {
+    width: 100%; padding: 13px; border: none; border-radius: 15px; cursor: pointer;
+    background: linear-gradient(135deg, var(--pink), var(--violet)); color: #fff; font-size: 15px; font-weight: 700;
+    box-shadow: 0 6px 18px rgba(255,107,157,.35); transition: all .18s; animation: up .3s ease;
+  }
+  .btn-big:hover { transform: translateY(-2px); box-shadow: 0 10px 22px rgba(255,107,157,.45); }
+  .btn-big.ghost { background: #fff; color: var(--violet); border: 1.5px solid var(--violet); box-shadow: none; }
+  .btn-ghost { width: 100%; padding: 12px; border: 1.5px solid var(--violet); border-radius: 15px; cursor: pointer; background: #fff; color: var(--violet); font-size: 14px; font-weight: 700; }
+
+  .input-bar { display: flex; gap: 8px; padding: 12px 18px 16px; border-top: 1px solid var(--line); }
+  .input-bar input { flex: 1; min-width: 0; padding: 12px 16px; border-radius: 999px; border: 1.5px solid var(--line); font-size: 14px; outline: none; background: #fff; color: var(--ink); }
+  .input-bar input:focus { border-color: var(--violet); }
+  .input-bar button { width: 46px; height: 46px; flex: none; border-radius: 50%; border: none; background: linear-gradient(135deg, var(--pink), var(--violet)); color: #fff; font-size: 18px; cursor: pointer; transition: all .18s; }
+  .input-bar button:hover { transform: translateY(-2px); box-shadow: 0 6px 14px rgba(255,107,157,.4); }
+
+  .toast {
+    position: fixed; top: 18px; left: 50%; transform: translateX(-50%);
+    background: linear-gradient(135deg, var(--pink), var(--violet)); color: #fff;
+    padding: 12px 22px; border-radius: 999px; font-weight: 700; font-size: 14px;
+    box-shadow: 0 8px 24px rgba(255,107,157,.4); z-index: 400; cursor: pointer; animation: up .3s ease;
+  }
+
+  /* ============ 覆盖层：Modal / Drawer ============ */
+  .overlay { position: fixed; inset: 0; background: rgba(58,46,69,.32); backdrop-filter: blur(3px); z-index: 300; display: flex; align-items: center; justify-content: center; animation: fade .2s ease; }
+  @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+  .modal { width: min(460px, 92vw); background: #fff; border-radius: 24px; box-shadow: 0 24px 60px rgba(58,46,69,.28); padding: 26px 26px 22px; animation: popup .28s ease; max-height: 90vh; overflow-y: auto; }
+  @keyframes popup { from { transform: translateY(14px) scale(.96); opacity: 0; } to { transform: none; opacity: 1; } }
+  .modal h3 { font-size: 18px; margin-bottom: 4px; }
+  .modal .msub { color: var(--ink-soft); font-size: 13px; margin-bottom: 18px; line-height: 1.6; }
+  .modal-lab { font-size: 12px; font-weight: 800; color: var(--ink-soft); margin-bottom: 10px; }
+  .modal-cta { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
+
+  .drawer-overlay { position: fixed; inset: 0; background: rgba(58,46,69,.30); z-index: 300; display: flex; justify-content: flex-end; animation: fade .2s ease; }
+  .drawer { width: min(430px, 94vw); height: 100%; background: #fff; box-shadow: -18px 0 50px rgba(58,46,69,.22); display: flex; flex-direction: column; animation: slide .28s ease; }
+  @keyframes slide { from { transform: translateX(30px); opacity: 0; } to { transform: none; opacity: 1; } }
+  .drawer-head { padding: 18px 20px 12px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--line); font-size: 15px; font-weight: 800; }
+  .drawer-body { flex: 1; overflow-y: auto; padding: 16px 18px; }
+  .drawer-x { margin-left: auto; width: 30px; height: 30px; border-radius: 50%; border: none; background: #f3ecf7; color: var(--ink-soft); font-size: 14px; cursor: pointer; }
+
+  /* ============ AI 观演计划 ============ */
+  .plan-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
+  .plan-hero { padding: 16px 20px 14px; }
+  .ph-top { display: flex; align-items: flex-start; gap: 16px; }
+  .ph-left { flex: 1; min-width: 0; }
+  .ph-title { font-size: 19px; font-weight: 800; line-height: 1.3; }
+  .ph-tour { font-size: 13px; font-weight: 700; color: var(--violet); }
+  .ph-meta { font-size: 13px; color: var(--ink-soft); margin-top: 5px; }
+  .ph-right { flex: none; text-align: right; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
+  .ph-dday { font-size: 26px; font-weight: 800; background: linear-gradient(90deg, var(--pink), var(--violet)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+  .ph-prog { font-size: 12px; color: var(--ink-soft); font-weight: 700; width: 160px; }
+  .ph-prog .bar { height: 7px; background: #eee4f1; border-radius: 7px; overflow: hidden; margin-top: 5px; }
+  .ph-prog .bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--mint), var(--sky)); border-radius: 7px; transition: width .5s ease; }
+  .ph-mid { display: flex; align-items: center; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
+  .ph-status-label { font-size: 12px; font-weight: 800; color: var(--ink-soft); }
+  .ph-actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .agent-sum { font-size: 13px; line-height: 1.6; padding: 12px 16px; border-radius: 16px; background: linear-gradient(135deg, #fff0f5, #f0edff); border: 1px solid #f4d9ec; color: var(--ink); }
+  .agent-sum b { color: var(--violet); }
+  .proactive { font-size: 12.5px; line-height: 1.6; padding: 10px 14px; border-radius: 14px; background: #fff8e1; border: 1px solid #ffe6a8; color: #8a6d1a; }
+  .proactive .mini-btn { margin: 0 2px; }
+
+  .stage-nav { display: flex; gap: 8px; flex-wrap: wrap; }
+  .stage-btn { padding: 8px 16px; border-radius: 999px; border: 1.5px solid var(--line); background: #fff; color: var(--ink-soft); font-size: 12.5px; font-weight: 700; cursor: pointer; transition: all .15s; }
+  .stage-btn.on { background: linear-gradient(135deg, var(--pink), var(--violet)); color: #fff; border-color: transparent; }
+  .stage-desc { font-size: 12px; color: var(--ink-soft); margin: -6px 2px 10px; }
+
+  .plan-body { flex: 1; min-height: 0; }
+  .plan-cols { grid-template-columns: 1.6fr 1fr; }
+  .timeline, .context { overflow-y: auto; padding: 16px 18px; }
+
+  /* Timeline */
+  .tl-node { display: flex; gap: 12px; padding: 12px 8px; border-radius: 14px; cursor: pointer; transition: background .15s; }
+  .tl-node:hover { background: #faf6fc; }
+  .tl-node.on { background: #f6f1ff; }
+  .tl-rail { display: flex; flex-direction: column; align-items: center; flex: none; }
+  .tl-dot { width: 24px; height: 24px; border-radius: 50%; background: linear-gradient(135deg, var(--pink), var(--violet)); color: #fff; font-size: 12px; display: flex; align-items: center; justify-content: center; flex: none; box-shadow: 0 3px 8px rgba(255,107,157,.3); }
+  .tl-node.done .tl-dot { background: var(--mint); box-shadow: none; }
+  .tl-line { flex: 1; width: 2px; background: var(--line); margin: 4px 0; }
+  .tl-body { flex: 1; min-width: 0; }
+  .tl-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .tl-when { font-size: 11px; font-weight: 800; color: var(--violet); background: #f3edff; padding: 2px 9px; border-radius: 999px; }
+  .tl-title { font-weight: 800; font-size: 13.5px; }
+  .tl-node.done .tl-title { color: var(--ink-soft); }
+  .tl-desc { font-size: 12px; color: var(--ink-soft); margin-top: 4px; line-height: 1.5; }
+
+  /* Context panel */
+  .ctx-head { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 14px; }
+  .ctx-head > div:first-child { flex: 1; min-width: 0; }
+  .ctx-title { font-size: 15px; font-weight: 800; }
+  .ctx-when { font-size: 11px; color: var(--ink-soft); margin-top: 2px; }
+  .ctx-sub { font-size: 12.5px; color: var(--ink-soft); margin-bottom: 10px; line-height: 1.5; }
+  .ctx-actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+
+  .hotel-ai { padding: 14px; border-radius: 15px; background: linear-gradient(135deg, #fff8e8, #fff0f5); border: 1.5px solid #ffe0c2; margin-bottom: 8px; }
+  .hotel-ai .n { font-size: 14.5px; font-weight: 800; display: flex; align-items: center; gap: 8px; }
+  .hotel-ai .n .cnt { margin-left: auto; color: var(--pink); font-size: 13px; font-weight: 800; }
+  .hotel-ai .d { font-size: 12px; color: var(--ink-soft); margin-top: 6px; line-height: 1.6; }
+  .hotel-ai .reason { font-size: 12.5px; color: var(--ink); margin-top: 8px; line-height: 1.55; }
+
+  .weather-card { padding: 14px; border-radius: 15px; background: linear-gradient(135deg, #eef4ff, #f0edff); border: 1.5px solid #dbe7ff; margin-bottom: 8px; }
+  .w-top { display: flex; align-items: center; gap: 12px; }
+  .w-emoji { font-size: 34px; }
+  .w-temp { font-size: 22px; font-weight: 800; }
+  .w-cond { font-size: 12.5px; color: var(--ink-soft); margin-top: 2px; }
+  .w-outfit { font-size: 12.5px; color: var(--ink); margin-top: 10px; line-height: 1.6; }
+  .adjust-line { font-size: 12.5px; color: var(--mint); font-weight: 600; padding: 6px 0; }
+  .demo-note { font-size: 11px; color: #b9aec4; margin-top: 8px; }
+
+  .add-item { display: flex; gap: 8px; margin-top: 12px; }
+  .add-item input { flex: 1; min-width: 0; padding: 10px 14px; border-radius: 999px; border: 1.5px solid var(--line); font-size: 13px; outline: none; }
+  .add-item input:focus { border-color: var(--violet); }
+  .add-item button { width: 40px; height: 40px; flex: none; border-radius: 50%; border: none; background: var(--violet); color: #fff; font-size: 18px; cursor: pointer; }
+  .risk-note { font-size: 12px; color: #c0392b; background: #fff0f0; border: 1px solid #ffd9d9; padding: 9px 12px; border-radius: 11px; margin-top: 8px; line-height: 1.5; }
+
+  /* D-Day */
+  .dday { display: flex; flex-direction: column; gap: 12px; }
+  .dday-top { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  .dday-top .card { padding: 14px 16px; font-size: 13px; line-height: 1.5; }
+  .dday-top .card .s { color: var(--ink-soft); font-size: 12px; margin-top: 4px; }
+  .dday-top .card .big { font-size: 24px; font-weight: 800; color: var(--violet); }
+  .dday-weather { display: flex; align-items: center; gap: 12px; }
+  .dday-weather .w-emoji { font-size: 30px; }
+  .dday-cols { display: grid; grid-template-columns: 1.15fr 1fr; gap: 12px; flex: 1; min-height: 0; }
+  .journey, .map { overflow-y: auto; padding: 14px 16px; }
+  .j-step { display: flex; align-items: flex-start; gap: 12px; padding: 9px 8px; border-radius: 13px; cursor: pointer; transition: background .15s; }
+  .j-step:hover { background: #faf6fc; }
+  .j-step.on { background: #f6f1ff; }
+  .j-time { font-size: 13px; font-weight: 800; color: var(--violet); flex: none; width: 44px; padding-top: 2px; }
+  .j-main { flex: 1; min-width: 0; }
+  .j-emoji { margin-right: 7px; }
+  .j-title { font-weight: 700; font-size: 13.5px; }
+  .j-sub { font-size: 11.5px; color: var(--ink-soft); margin-top: 2px; line-height: 1.5; }
+  .j-down { flex: none; color: #d9c9ec; font-size: 14px; font-weight: 800; padding-top: 2px; }
+
+  .rmap { width: 100%; height: auto; display: block; border-radius: 14px; }
+
+  /* 场馆周边 */
+  .poi-wrap { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .poi-grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 14px; }
+  .poi-map { min-height: 260px; }
+  .poi-card { padding: 14px; border-radius: 15px; background: linear-gradient(135deg, #fff0f5, #f0edff); border: 1.5px solid #f4d9ec; }
+  .poi-name { font-size: 15px; font-weight: 800; }
+  .poi-meta { font-size: 12px; color: var(--ink-soft); margin-top: 6px; line-height: 1.6; }
+  .poi-why { font-size: 12.5px; color: var(--ink); margin-top: 10px; line-height: 1.6; padding: 9px 11px; border-radius: 11px; background: #fff; }
+  .poi-card .mini-btn { margin-top: 12px; margin-right: 6px; }
+  .poi-others { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+  .poi-other { font-size: 12.5px; padding: 8px 11px; border-radius: 11px; background: #faf6fc; cursor: pointer; transition: background .15s; }
+  .poi-other:hover { background: #f3ecf7; }
+
+  /* FAB + Agent drawer chat */
+  .fab { position: fixed; right: 26px; bottom: 26px; width: 58px; height: 58px; border-radius: 50%; border: none; background: linear-gradient(135deg, var(--pink), var(--violet)); color: #fff; font-size: 24px; cursor: pointer; box-shadow: 0 10px 26px rgba(255,107,157,.45); z-index: 250; transition: all .18s; }
+  .fab:hover { transform: translateY(-3px) scale(1.05); box-shadow: 0 14px 30px rgba(255,107,157,.55); }
+  .agent-chat { display: flex; flex-direction: column; gap: 12px; }
+  .agent-msgs { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+  .abot { font-size: 13px; line-height: 1.6; padding: 11px 14px; border-radius: 14px; background: #faf6fc; border: 1px solid var(--line); border-top-left-radius: 4px; align-self: flex-start; max-width: 92%; }
+  .auser { font-size: 13px; line-height: 1.5; padding: 10px 14px; border-radius: 14px; background: linear-gradient(135deg, var(--sky), var(--mint)); color: #fff; border-top-right-radius: 4px; align-self: flex-end; max-width: 88%; }
+  .agent-msgs .action-row { align-self: stretch; margin-top: 2px; }
+  .agent-msgs .action-row .btn-big { font-size: 13px; padding: 11px; }
+
+  /* ============ Round 5 新增 ============ */
+  .reset-btn { font-size: 11px; color: var(--ink-soft); background: #fff; border: 1.5px solid var(--line); padding: 5px 11px; border-radius: 999px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  .reset-btn:hover { border-color: var(--violet); color: var(--violet); }
+
+  .field { margin-bottom: 10px; }
+  .field label { font-size: 11px; font-weight: 800; color: var(--ink-soft); display: block; margin-bottom: 4px; }
+  .field input, .field select, .field textarea { width: 100%; padding: 9px 12px; border-radius: 10px; border: 1.5px solid var(--line); font-size: 13px; outline: none; background: #fff; color: var(--ink); font-family: inherit; }
+  .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--violet); }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  .overview-card { padding: 13px 14px; border-radius: 14px; background: linear-gradient(135deg,#fff8e8,#fff0f5); border: 1.5px solid #ffe0c2; margin-bottom: 12px; font-size: 12.5px; line-height: 1.75; }
+  .overview-card .ov-title { font-weight: 800; margin-bottom: 4px; }
+  .overview-card b { color: var(--violet); }
+
+  .sel-card { padding: 12px 13px; border-radius: 13px; border: 1.5px solid var(--line); margin-bottom: 9px; background: #fff; }
+  .sel-card.sel { border-color: var(--mint); background: #effaf6; }
+  .sel-card .n { font-weight: 700; font-size: 13.5px; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+  .sel-card .n .cnt { margin-left: auto; color: var(--pink); font-weight: 800; font-size: 12.5px; }
+  .sel-card .d { font-size: 12px; color: var(--ink-soft); margin-top: 5px; line-height: 1.5; }
+  .sel-card .why { font-size: 12.5px; color: var(--ink); margin-top: 7px; line-height: 1.55; }
+  .sel-card .acts { display: flex; gap: 7px; margin-top: 10px; flex-wrap: wrap; }
+
+  .join-card { padding: 20px 16px; border-radius: 16px; background: linear-gradient(135deg,#fff0f5,#f0edff); border: 1.5px solid #f4d9ec; text-align: center; margin-bottom: 12px; }
+  .join-card .jc-title { font-weight: 800; font-size: 15px; }
+  .join-card .jc-sub { font-size: 12.5px; color: var(--ink-soft); margin: 8px 0 14px; line-height: 1.6; }
+  .join-card .btn-big { width: auto; padding: 11px 26px; margin: 0 auto; }
+
+  .my-group { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 13px; border: 1.5px solid var(--line); margin-bottom: 8px; cursor: pointer; background: #fff; transition: all .15s; }
+  .my-group:hover { border-color: var(--violet); }
+  .my-group .mg-ava { font-size: 20px; flex: none; }
+  .my-group .mg-main { flex: 1; min-width: 0; }
+  .my-group .mg-t { font-weight: 700; font-size: 13px; }
+  .my-group .mg-s { font-size: 11.5px; color: var(--ink-soft); margin-top: 2px; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .my-group .mg-x { flex: none; width: 22px; height: 22px; border-radius: 50%; border: none; background: #f3ecf7; color: var(--ink-soft); cursor: pointer; font-size: 11px; }
+
+  @media (max-width: 1000px) {
+    body { overflow: auto; }
+    .home-cols, .chat-cols, .plan-cols, .dday-cols, .dday-top, .poi-grid { grid-template-columns: 1fr; }
+    .msgs { max-height: 46vh; }
+  }
+</style>
+</head>
+<body>
+  <div class="stickers" id="stickers"></div>
+
+  <div class="app">
+    <header>
+      <div class="logo">🎤</div>
+      <div class="brand">
+        <div class="t">星演 <span class="hl">StarShow</span></div>
+        <div class="s">每一次出发，都是为了见想见的人。</div>
+      </div>
+      <span class="demo-badge">高保真原型 · 示例数据</span>
+      <button class="reset-btn" id="resetBtn">↻ 重置 Demo</button>
+      <div class="tabs" id="tabs"></div>
+    </header>
+
+    <main id="view"></main>
+  </div>
+
+<script>
+/* ================= 数据 ================= */
+const CONCERTS = [
+  { id:'tf', artist:'TF家族', tour:'「一起长大」夏日家族演唱会', city:'上海', venue:'上海东方体育中心', date:'2026.10.03 周六 19:30', emoji:'🎪',
+    tiers:[
+      ['内场VIP','A区 前排',1680,10,5,10,'离舞台最近，能看清每个成员，气氛最炸'],
+      ['内场后区','A区 后排',1280,8,6,8,'近距离，视野稳，声音清晰'],
+      ['看台A区','正面看台',880,8,8,5,'正对舞台，整体视野最舒服'],
+      ['看台B区','侧面看台',580,6,7,4,'侧向视角，看整体舞美'],
+      ['山顶','高层看台',380,5,6,2,'主打全场大合唱氛围，性价比高'],
+    ]},
+  { id:'jay', artist:'周杰伦', tour:'「嘉年华」世界巡回演唱会', city:'上海', venue:'梅赛德斯-奔驰文化中心', date:'2026.10.17 周六 19:30', emoji:'🎹',
+    tiers:[
+      ['内场VIP','A1区 前排',2080,10,5,10,'离舞台最近，能看清人，但正对音箱、低频会有点糊'],
+      ['内场后区','A2区',1580,8,6,8,'离得近、视野稳，音响比最前排稍好'],
+      ['看台A区','正面看台',780,8,8,5,'正对舞台，整体视野最舒服，音响均衡'],
+      ['看台B区','侧面看台',580,6,7,4,'侧面看台，能看整体但人偏小'],
+      ['山顶','高层看台',380,5,6,2,'看气氛、听歌，人很小，主打一个氛围'],
+    ]},
+  { id:'xzq', artist:'薛之谦', tour:'「天外来物」巡回演唱会', city:'上海', venue:'梅赛德斯-奔驰文化中心', date:'2026.11.08 周日 19:30', emoji:'🎸',
+    tiers:[
+      ['内场VIP','A区 前排',1680,10,5,10,'怼脸最近，音墙明显，纯冲人去'],
+      ['内场后区','A区 后排',1280,8,6,8,'近且视野稳，声音比前排清晰'],
+      ['看台A区','正面看台',880,8,8,5,'正对舞台，声画最均衡的一档'],
+      ['看台B区','侧面看台',680,6,7,4,'侧向视角，适合看整体舞美'],
+      ['山顶','高层看台',480,5,6,2,'性价比高，感受全场大合唱氛围'],
+    ]},
+  { id:'jj', artist:'林俊杰', tour:'「JJ20」世界巡回演唱会', city:'北京', venue:'国家体育场（鸟巢）', date:'2026.10.24 周六 19:00', emoji:'🎙️',
+    tiers:[
+      ['内场VIP','中央A区',2180,10,5,10,'鸟巢内场，离舞台最近，氛围最炸'],
+      ['内场后区','内场B区',1680,8,6,8,'近距离，声场比前排稳'],
+      ['看台A区','主席台对面',980,8,8,5,'正对舞台，视野开阔、音响均衡'],
+      ['看台B区','两侧看台',680,6,7,4,'看整体灯光秀的最佳角度'],
+      ['山顶','最上层看台',480,5,6,2,'鸟巢很大，主打万人合唱氛围'],
+    ]},
+  { id:'mayday', artist:'五月天', tour:'「回到那一天」25周年演唱会', city:'北京', venue:'凯迪拉克中心', date:'2026.11.15 周日 19:30', emoji:'🥁',
+    tiers:[
+      ['内场VIP','A区 前排',1580,10,5,10,'离阿信最近，站着嗨全场'],
+      ['内场后区','A区 后排',1180,8,6,8,'近距且视野稳，声音清晰'],
+      ['看台A区','正面看台',880,8,8,5,'正面视角，声画均衡，合唱氛围好'],
+      ['看台B区','侧面看台',580,6,7,4,'侧面，适合看整场舞美'],
+      ['山顶','高层看台',380,5,6,2,'性价比之选，主打全场大合唱'],
+    ]},
+  { id:'gem', artist:'邓紫棋', tour:'「I AM GLORIA」世界巡回演唱会', city:'广州', venue:'宝能广州国际体育演艺中心', date:'2026.11.22 周日 19:30', emoji:'🎹',
+    tiers:[
+      ['内场VIP','A区 前排',1680,10,5,10,'离G.E.M.最近，高音扑面'],
+      ['内场后区','A区 后排',1280,8,6,8,'近距，声场稳'],
+      ['看台A区','正面看台',780,8,8,5,'正对舞台，音响均衡'],
+      ['看台B区','侧面看台',580,6,7,4,'侧向视角'],
+      ['山顶','高层看台',380,5,6,2,'氛围型，听歌为主'],
+    ]},
+  { id:'eason', artist:'陈奕迅', tour:'「FEAR AND DREAMS」世界巡回演唱会', city:'深圳', venue:'深圳湾体育中心「春茧」', date:'2026.12.05 周六 19:30', emoji:'🎧',
+    tiers:[
+      ['内场VIP','中央区 前排',1980,10,5,10,'离Eason最近，听他的故事'],
+      ['内场后区','中央区 后排',1480,8,6,8,'近距，声音层次好'],
+      ['看台A区','正面看台',980,8,8,5,'正对舞台，声画均衡'],
+      ['看台B区','两侧看台',680,6,7,4,'侧向视角'],
+      ['山顶','高层看台',480,5,6,2,'主打氛围与全场大合唱'],
+    ]},
+];
+
+const TIER_KEYS = ['name','area','price','view','sound','close','tip'];
+function tierObj(arr){ return { name:arr[0], area:arr[1], price:arr[2], view:arr[3], sound:arr[4], close:arr[5], tip:arr[6] }; }
+
+const BUDGETS = { '¥500以下':500, '¥500-1000':1000, '¥1000-2000':2000, '不限':Infinity };
+const PREFS = { '离爱豆近':'close', '听感好':'sound', '性价比':'value' };
+
+const ARTISTS = [...new Set(CONCERTS.map(c=>c.artist))];
+const CITIES  = [...new Set(CONCERTS.map(c=>c.city))];
+const BUDGET_OPTS = Object.keys(BUDGETS);
+const PREF_OPTS = Object.keys(PREFS);
+const TIMES = ['周末场', '工作日晚上', '都可以'];
+const HOME_CITIES = ['重庆','上海','北京','广州','深圳'];
+
+const SECURITY = [
+  ['✅','ok','官方灯牌 / 手幅 / 手灯：按粉丝会公布的规格可以带'],
+  ['✅','ok','小风扇、暖宝宝、充电宝：场内可以用'],
+  ['✅','ok','小卡片相机（不带自拍杆）：可以拍'],
+  ['🚫','no','大型灯牌 / 横幅：会挡后排，不能带'],
+  ['🚫','no','自拍杆 / 三脚架 / 专业摄影机：禁止'],
+  ['🚫','no','瓶装水 / 食品：场内有售，外带不能进'],
+];
+const RIBBON = [
+  '颜色按官方应援色，尺寸不超过 A4，避免挡到后排视线',
+  '只在副歌 / 指定应援点举起，别全程举着',
+  '散场带走自己的飘带，不往台上抛、不乱扔',
+];
+const HOTEL_GROUPS = [
+  { em:'🏨', name:'近场馆的酒店', count:12, sub:'步行 5 分钟内到场馆', desc:'¥600-1200 / 晚 · 演出当天涨价快，建议提前 1 周订', items:['××大酒店 · 距场馆 300m','××精品酒店 · 距场馆 450m','××国际 · 距场馆 500m'] },
+  { em:'🚇', name:'近地铁的酒店', count:8, sub:'地铁 1-2 站直达', desc:'¥300-600 / 晚 · 散场地铁人多，走到下一站再进站更快', items:['××快捷酒店 · 2 号线 1 站','××酒店 · 地铁口 200m','××连锁 · 2 站直达'] },
+  { em:'🔥', name:'最多人订的', count:5, sub:'粉丝口碑好、性价比高', desc:'¥400-700 / 晚 · 同场粉丝集中订，结伴散场更安全', items:['××电竞酒店 · 好评 4.8','××公寓 · 可拼房','××酒店 · 应援接送'] },
+];
+
+/* 可选择的酒店（小星推荐 → 用户选择加入计划） */
+const HOTELS = [
+  { id:'h1', name:'星海精选酒店', price:'¥568 / 晚', walk:'步行 12 min', transit:'地铁 8 号线直达 · 35 min', note:'散场无需挤最近地铁', reason:'结合你的返程计划、预算与散场时间，综合便利性最好。' },
+  { id:'h2', name:'地铁口快捷酒店', price:'¥328 / 晚', walk:'步行 18 min', transit:'地铁 2 站 · 15 min', note:'价格更友好，地铁直达', reason:'预算优先，地铁 2 站直达场馆，散场走一站再进站。' },
+  { id:'h3', name:'同场粉丝公寓', price:'¥298 / 晚', walk:'步行 22 min', transit:'地铁 3 站 · 20 min', note:'同场粉丝多，可结伴', reason:'同场粉丝集中入住，散场结伴更安全，还能拼房。' },
+];
+
+const COMMUNITY = {
+  channels:['全部','拼房','拼车','找搭子','应援','转票'],
+  messages:[
+    { ch:'拼房', name:'奶盖不加糖', ava:'🐰', txt:'有没有姐妹拼房？我订了场馆附近两晚，差一个室友，¥300/晚，可看订单', time:'2 分钟前' },
+    { ch:'拼车', name:'追光者', ava:'🦊', txt:'散场拼车回虹桥，还有 2 个座，需要的滴滴', time:'8 分钟前' },
+    { ch:'应援', name:'应援组-小鹿', ava:'🦌', txt:'主副歌应援点位图更新啦，灯牌统一 A4 规格，记得看群公告', time:'15 分钟前' },
+    { ch:'找搭子', name:'一个人也要去', ava:'🐱', txt:'第一次看，落单求搭子！我坐看台A区，有没有同区的姐妹', time:'22 分钟前' },
+    { ch:'转票', name:'出票小能手', ava:'🎫', txt:'出一张内场VIP，临时去不了，原价出，走平台可验票！', time:'30 分钟前' },
+    { ch:'全部', name:'星星不落泪', ava:'✨', txt:'有没有人一起做应援手幅呀？我材料买多了，可以分你们', time:'40 分钟前' },
+  ],
+};
+let communityMsgs = null;
+function communityList(){ if(!communityMsgs) communityMsgs = COMMUNITY.messages.slice(); return communityMsgs; }
+
+/* ================= 状态机 / 阶段 ================= */
+const STATUS = [
+  { id:'considering', label:'还在考虑' },
+  { id:'ticketing',    label:'准备抢票' },
+  { id:'ticketed',     label:'已经有票' },
+];
+const STATUS_IDS = STATUS.map(s=>s.id);
+function statusLabel(id){ const s=STATUS.find(x=>x.id===id); return s?s.label:id; }
+
+const PLAN_STAGES = [
+  { id:'prep',   label:'购票准备', emoji:'🎫' },
+  { id:'prep2',  label:'行前准备', emoji:'🎒' },
+  { id:'dday',   label:'演出当天', emoji:'🎤' },
+  { id:'return', label:'散场返程', emoji:'🏠' },
+];
+function stageDesc(stage){
+  return { prep:'确定票档、座位和抢票策略，把票稳稳拿下。', prep2:'住宿、城际交通、天气、行前清单，出发前都安排好。', dday:'演出当天从出发到入场，跟着路线走。', return:'散场、夜宵、返程，平安到家。' }[stage] || '';
+}
+
+const PACKING = ['身份证','手机','充电宝','门票 / 电子票确认','应援物','雨伞','薄外套'];
+const PACK_WARN_RE = /自拍杆|三脚架|摄影机|瓶装水|食品|酒/;
+
+const WEATHER_MOCK = { temp:'18–23°C', cond:'小雨', rain:70, night:'17°C', outfit:'短袖 + 薄外套', tips:['带折叠伞','穿防滑运动鞋'] };
+
+const VENUE_POIS = [
+  { id:'noodle', emoji:'🍜', cat:'吃饭', name:'老上海面馆', dist:'400m', walk:'6 min', price:'¥45/人', hours:'营业至 22:30', reason:'你预计 16:10 到达附近，用餐约 40 min，仍可在 18:10 前到达安检口。', pos:[250,190] },
+  { id:'hotpot', emoji:'🌶', cat:'散场夜宵', name:'川味火锅', dist:'600m', walk:'9 min', price:'¥110/人', hours:'营业至 02:00', reason:'散场后仍营业，距返程地铁站近，适合演出后聚餐。', pos:[330,250] },
+  { id:'cafe', emoji:'☕', cat:'等人', name:'星星咖啡', dist:'350m', walk:'5 min', price:'¥32/人', hours:'营业至 21:00', reason:'早到等人的好去处，有座位 + 充电位。', pos:[210,140] },
+  { id:'photo', emoji:'📸', cat:'打卡', name:'场馆前广场', dist:'200m', walk:'3 min', price:'免费', hours:'全天', reason:'正门应援区，光线好，适合散场前打卡。', pos:[430,120] },
+  { id:'goods', emoji:'🎁', cat:'周边', name:'官方周边店', dist:'150m', walk:'2 min', price:'—', hours:'演出日 13:00 开', reason:'提前买好应援物，避免散场排队。', pos:[470,90] },
+  { id:'metro2', emoji:'🚇', cat:'交通', name:'××地铁站', dist:'500m', walk:'8 min', price:'¥4', hours:'末班 23:30', reason:'散场步行一站再进站，避开拥挤。', pos:[160,230] },
+  { id:'ride', emoji:'🚕', cat:'上车点', name:'网约车上车点', dist:'300m', walk:'5 min', price:'—', hours:'24h', reason:'散场后步行至此再叫车，避免堵在场馆门口。', pos:[430,250] },
+  { id:'locker', emoji:'🧳', cat:'寄存', name:'场馆寄存处', dist:'100m', walk:'2 min', price:'¥20/件', hours:'演出前 2h 开放', reason:'大件行李建议寄存，轻装入场安检更快。', pos:[470,160] },
+];
+const POI_CATS = ['全部','吃饭','散场夜宵','等人','打卡','周边','交通','上车点','寄存'];
+
+const MAP_NODE_LABEL = {
+  hotel:{emoji:'🏨',name:'酒店'}, metro:{emoji:'🚇',name:'地铁站'}, noodle:{emoji:'🍜',name:'面馆'},
+  venue:{emoji:'🏟',name:'场馆'}, exit:{emoji:'🚪',name:'散场出口'}, ride:{emoji:'🚕',name:'上车点'}, photo:{emoji:'📸',name:'打卡点'},
+};
+const MAP_POS = {
+  hotel: [70,300], metro: [180,280], noodle: [300,205], venue: [470,120],
+  exit: [520,215], ride: [430,300], photo: [360,150],
+};
+
+/* ================= 状态 ================= */
+const state = { view:'chat', activeConcert:null, focusTier:null, prefLabel:null, editing:false, from:'home', detailTab:'seat', planStage:'prep', planNode:null, journeySel:null, hostFocus:null, detailTabLocked:false, planStageLocked:false };
+let profile = null;
+let watchlist = [];   // 每项：{ id, tier, status, plan, checklist, pack, addedAt }
+let favorites = [];
+let chatLog = [];
+let community = {};   // { [concertId]: { joined:true } }
+
+const PROFILE_FIELDS = [
+  { key:'artists', em:'🎤', lab:'想见', opts:ARTISTS, multi:true },
+  { key:'cities',  em:'📍', lab:'城市', opts:CITIES, multi:true },
+  { key:'home',    em:'🏡', lab:'所在地', opts:HOME_CITIES },
+  { key:'time',    em:'🕒', lab:'时段', opts:TIMES },
+  { key:'budget',  em:'💰', lab:'预算', opts:BUDGET_OPTS },
+  { key:'pref',    em:'✨', lab:'在意', opts:PREF_OPTS },
+];
+
+/* ================= 持久化 ================= */
+const LS_KEY = 'starshows_v2';
+function saveState(){
+  try { localStorage.setItem(LS_KEY, JSON.stringify({ profile, watchlist, favorites, community })); } catch(e){}
+}
+function migrateProfile(p){
+  if(!p) return p;
+  if(typeof p.artist==='string'){ p.artists=[p.artist]; delete p.artist; }
+  if(typeof p.city==='string'){ p.cities=[p.city]; delete p.city; }
+  if(p.artists && !Array.isArray(p.artists)) p.artists=[p.artists];
+  if(p.cities && !Array.isArray(p.cities)) p.cities=[p.cities];
+  return p;
+}
+function migrateWatchlist(list){
+  list.forEach(w=>{
+    if(typeof w.status==='string' && !STATUS_IDS.includes(w.status)){
+      if(w.status==='已有票') w.status='ticketed';
+      else if(w.status==='还在考虑') w.status='considering';
+      else w.status='ticketing';
+    }
+    if(!w.status) w.status='ticketing';
+    // 旧版 plan 结构迁移：老数据无 returnJourney、任务无 stage，会导致阶段内容为空
+    if(w.plan && !Array.isArray(w.plan.returnJourney)){
+      const c = CONCERTS.find(c=>c.id===w.id);
+      if(c){
+        const old = w.plan;
+        const fresh = buildPlan(c, w);
+        if(Array.isArray(old.tasks)){
+          const doneByKey = {};
+          old.tasks.forEach(t=>{ doneByKey[t.key] = !!t.done; });
+          fresh.tasks.forEach(t=>{ if(doneByKey[t.key] != null) t.done = doneByKey[t.key]; });
+        }
+        w.plan = fresh;
+      }
+    }
+  });
+  return list;
+}
+function loadState(){
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if(!raw) return false;
+    const d = JSON.parse(raw);
+    if(d.profile) profile = migrateProfile(d.profile);
+    if(profile) state.prefLabel = profile.pref;
+    if(d.watchlist) watchlist = migrateWatchlist(d.watchlist);
+    if(d.favorites) favorites = d.favorites;
+    if(d.community) community = d.community;
+    saveState();
+    return true;
+  } catch(e){ return false; }
+}
+
+/* 默认演示数据（首次打开 / 重置 Demo） */
+function seedState(){
+  profile = { artists:['TF家族'], cities:['上海'], home:'重庆', time:'周末场', budget:'¥1000-2000', pref:'听感好' };
+  state.prefLabel = profile.pref;
+  favorites = ['jay'];
+  community = { tf: { joined:true } };
+  watchlist = [];
+  const c = CONCERTS[0];
+  const w = { id:c.id, tier:null, status:'ticketing', checklist:[false,false,false,false,false,false], addedAt:Date.now() };
+  watchlist.push(w);
+  generatePlan(c, w);
+  const t1 = w.plan.tasks.find(t=>t.key==='ticket'); if(t1) t1.done=true;
+  const t4 = w.plan.tasks.find(t=>t.key==='weather'); if(t4) t4.done=true;
+  ensurePack(w); w.pack[0].done=true; w.pack[1].done=true;
+  saveState();
+}
+
+/* ================= 工具 ================= */
+const $ = s => document.querySelector(s);
+function el(tag, cls, html){ const d=document.createElement(tag); if(cls) d.className=cls; if(html!=null) d.innerHTML=html; return d; }
+function btn(label, cb, cls){ const b=el('button','mini-btn'+(cls?' '+cls:''),label); b.onclick=cb; return b; }
+function scrollChat(){ const m=$('#msgs'); if(m) m.scrollTop = m.scrollHeight; }
+function daysUntil(dateStr){
+  const m = dateStr.match(/(\d{4})\.(\d{2})\.(\d{2})/);
+  if(!m) return null;
+  const d = new Date(+m[1], +m[2]-1, +m[3]);
+  const now = new Date();
+  return Math.ceil((d - now)/86400000);
+}
+function isWeekend(dateStr){ return /(周六|周日)/.test(dateStr); }
+function daysLabel(d){
+  if(d===null) return '';
+  if(d<0) return '已结束';
+  if(d===0) return '就是今天 🎉';
+  return d+' 天后';
+}
+function dLabel(d){
+  if(d===null) return '';
+  if(d<0) return '已结束';
+  if(d===0) return 'D-Day';
+  return 'D-'+d;
+}
+
+/* ================= 贴纸（轻量） ================= */
+(function stickers(){
+  const box=$('#stickers');
+  const ems=['🎤','🎵','✨','💿','🎫','🎧','🎸','🎀'];
+  const spots=[[8,14],[22,74],[48,82],[64,20],[86,66],[30,48],[76,34],[14,60]];
+  spots.forEach((p,i)=>{
+    const s=document.createElement('span');
+    s.className='sticker'; s.textContent=ems[i%ems.length];
+    s.style.left=p[0]+'%'; s.style.top=p[1]+'%';
+    s.style.animationDelay=(i*0.8)+'s'; s.style.animationDuration=(7+i%4)+'s';
+    box.appendChild(s);
+  });
+})();
+
+/* ================= Tab ================= */
+const TABS = [
+  { id:'chat',   em:'💬', lab:'AI' },
+  { id:'home',   em:'🏠', lab:'我的主页' },
+];
+function renderTabs(){
+  const box=$('#tabs'); box.innerHTML='';
+  TABS.forEach(t=>{
+    const d=el('div','tab'+(state.view===t.id?' active':''), `<span>${t.em}</span>${t.lab}`);
+    d.onclick=()=>switchView(t.id);
+    box.appendChild(d);
+  });
+}
+function profArtists(){ return (profile && Array.isArray(profile.artists)) ? profile.artists : []; }
+function profCities(){ return (profile && Array.isArray(profile.cities)) ? profile.cities : []; }
+function switchView(v){
+  if(v==='detail' && !state.activeConcert){
+    state.activeConcert = CONCERTS.find(c=>profArtists().includes(c.artist)) || CONCERTS[0];
+  }
+  if(v==='plan' && !state.activeConcert){
+    const ap=activePlan();
+    if(ap) state.activeConcert = ap.c;
+  }
+  if((v==='detail'||v==='plan') && state.view!==v){
+    state.from = state.view;
+    if(v==='detail' && !state.detailTabLocked) state.detailTab='seat';
+    if(v==='plan' && !state.planStageLocked){ state.planStage='prep'; state.planNode=null; state.journeySel=null; }
+  }
+  state.detailTabLocked = false;
+  state.planStageLocked = false;
+  state.view=v;
+  renderTabs();
+  renderMain();
+}
+
+/* 导航：跳到详情页某个 tab +（可选）自动展开并定位的 host 分区 */
+function openDetail(tab, focus){
+  state.activeConcert = state.activeConcert || CONCERTS[0];
+  state.detailTab = tab || 'seat';
+  state.hostFocus = focus || null;
+  state.detailTabLocked = true;
+  switchView('detail');
+}
+/* 导航：跳到计划页某个阶段 +（可选）聚焦的节点 */
+function openPlanStage(stage, node){
+  const ap = activePlan();
+  state.activeConcert = ap ? ap.c : (state.activeConcert || CONCERTS[0]);
+  if(stage){ state.planStage = stage; state.planStageLocked = true; }
+  if(node != null){ state.planNode = node; }
+  switchView('plan');
+}
+
+/* ================= 主渲染 ================= */
+function renderMain(){
+  document.querySelectorAll('.fab').forEach(f=>f.remove());
+  const v=$('#view'); v.innerHTML='';
+  if(state.view==='home') renderHome();
+  else if(state.view==='detail') renderDetail();
+  else if(state.view==='plan') renderPlan();
+  else renderChat();
+}
+function rerender(){ if(state.view==='plan') renderPlan(); else renderMain(); }
+
+/* ================= 画像 ================= */
+function fieldFilled(f){ const v = profile && profile[f.key]; if(!v) return false; return Array.isArray(v) ? v.length>0 : true; }
+function fieldDisplay(f){ const v = profile && profile[f.key]; if(v==null) return null; return Array.isArray(v) ? v.join(' · ') : v; }
+function profileDone(){ return profile && PROFILE_FIELDS.every(f=>fieldFilled(f)); }
+function profileCount(){ return profile ? PROFILE_FIELDS.filter(f=>fieldFilled(f)).length : 0; }
+
+/* ================= 主页 ================= */
+function renderHome(){
+  const v=$('#view'); v.innerHTML='';
+  if(!profileDone() || state.editing){
+    v.appendChild(renderQuestionnaire());
+  } else {
+    v.innerHTML = `<div class="cols home-cols">
+      <aside class="card profile" id="profileCard"></aside>
+      <section class="card rec-panel" id="recPanel"></section>
+      <aside class="card trip-panel" id="tripPanel"></aside>
+    </div>`;
+    renderProfileCard(); renderRecList(); renderPlans();
+  }
+}
+
+function renderQuestionnaire(){
+  const q=el('div','quest');
+  q.appendChild(el('h2','', state.editing ? '✏️ 编辑你的追星档案' : '先认识一下你 🎀'));
+  q.appendChild(el('div','sub','勾几个选项，我就能帮你盯紧每一场想看的演出、生成专属的观演计划～'));
+  PROFILE_FIELDS.forEach(f=>{
+    const step=el('div','q-step');
+    step.appendChild(el('div','q-lab',`${f.em} ${f.lab}${f.multi?'<small>（可多选）</small>':''}${f.key==='time'?'<small>（方便去看的时间）</small>':''}`));
+    const grid=el('div','opt-grid');
+    f.opts.forEach(o=>{
+      const val = profile ? profile[f.key] : null;
+      const on = f.multi ? (Array.isArray(val) && val.includes(o)) : (val===o);
+      const oc=el('div','opt-card'+(on?' on':''), o);
+      oc.onclick=()=>{
+        if(!profile) profile={};
+        if(f.multi){
+          if(!Array.isArray(profile[f.key])) profile[f.key]=[];
+          const arr=profile[f.key];
+          const i=arr.indexOf(o);
+          if(i>=0) arr.splice(i,1); else arr.push(o);
+          oc.classList.toggle('on', arr.includes(o));
+        } else {
+          profile[f.key]=o;
+          [...grid.children].forEach(c=>c.classList.remove('on'));
+          oc.classList.add('on');
+        }
+        refreshQuestFoot();
+      };
+      grid.appendChild(oc);
+    });
+    step.appendChild(grid);
+    q.appendChild(step);
+  });
+  const foot=el('div','foot');
+  foot.appendChild(el('div','prog','<i id="qProg"></i>'));
+  const b=el('button','btn-big', state.editing?'保存修改 ✨':'生成我的推荐 ✨');
+  b.onclick=()=>{
+    if(!profileDone()) return;
+    if(state.prefLabel!==profile.pref) state.prefLabel=profile.pref;
+    saveState();
+    state.editing=false;
+    switchView('chat');
+  };
+  foot.appendChild(b);
+  q.appendChild(foot);
+  refreshQuestFoot();
+  return q;
+}
+function refreshQuestFoot(){
+  const prog=$('#qProg');
+  if(prog) prog.style.width = (profileCount()/PROFILE_FIELDS.length*100)+'%';
+}
+
+function renderProfileCard(){
+  const c=$('#profileCard'); c.innerHTML='';
+  const head=el('div','pf-head',`<div class="avatar">🎀</div><div><div class="t">追星档案</div><div class="s">${profileDone()?'已完全了解你 ✨':'正在认识你…'}</div></div>`);
+  const edit=el('button','pf-edit','✏️ 编辑'); edit.onclick=()=>{ state.editing=true; renderHome(); };
+  head.appendChild(edit);
+  c.appendChild(head);
+  c.appendChild(el('div','pf-progress',`<i style="width:${profileCount()/PROFILE_FIELDS.length*100}%"></i>`));
+  const tags=el('div','pf-tags','');
+  PROFILE_FIELDS.forEach(f=>{
+    const val=fieldDisplay(f);
+    tags.appendChild(el('div','pf-tag'+(val?' filled':''),
+      `<span class="em">${f.em}</span><span class="lab">${f.lab}</span>${val?`<span class="val">${val}</span>`:'<span class="val">待了解…</span>'}`));
+  });
+  c.appendChild(tags);
+  c.appendChild(el('div','pf-foot','💡 档案会一直存着，随时 ✏️ 改。我会按它帮你盯演出、选座位、生成整趟观演计划。'));
+}
+
+function rank(c){
+  const a = profArtists().includes(c.artist) ? 3 : 0;
+  const hom = (profile && c.city===profile.home) ? 2 : 0;
+  const cit = profCities().includes(c.city) ? 1 : 0;
+  return a+hom+cit;
+}
+function timeTag(c){
+  if(profile.time==='周末场' && isWeekend(c.date)) return ' · <b style="color:var(--mint)">周末场 ✓</b>';
+  if(profile.time==='工作日晚上' && !isWeekend(c.date)) return ' · <b style="color:var(--mint)">平日晚上 ✓</b>';
+  return '';
+}
+function renderRecList(){
+  const box=$('#recPanel'); box.innerHTML='';
+  box.appendChild(el('div','rec-head','🎫 最近适合你的演出'));
+  const recs = CONCERTS.filter(c=> profArtists().includes(c.artist) || (profile && c.city===profile.home) || profCities().includes(c.city));
+  const list = recs.length?recs.slice():CONCERTS.slice();
+  list.sort((a,b)=>rank(b)-rank(a));
+  list.forEach(c=>{
+    const art = profArtists().includes(c.artist);
+    const hom = profile && c.city===profile.home;
+    const cit = profCities().includes(c.city) && !hom;
+    const matchTag = (art&&hom)?'<span class="tag" style="background:#effaf6;color:var(--mint)">完美匹配</span>'
+      : art?'<span class="tag" style="background:#fff0f5;color:var(--pink)">你追的</span>'
+      : hom?'<span class="tag" style="background:#eef4ff;color:var(--sky)">同城</span>'
+      : cit?'<span class="tag" style="background:#eef4ff;color:var(--sky)">想去城市</span>'
+      : '';
+    const card=el('div','concert-card');
+    card.appendChild(el('div','row1',`<span style="font-size:22px">${c.emoji}</span><span class="art">${c.artist}</span><span class="tag">${c.tour}</span>${matchTag}`));
+    card.appendChild(el('div','meta',`📍 ${c.city} · ${c.venue}<br>🗓 ${c.date}${timeTag(c)}`));
+    const act=el('div','card-actions');
+    const fav=el('button','mini-btn'+(isFav(c.id)?' on':''), isFav(c.id)?'★ 已收藏':'☆ 收藏');
+    fav.onclick=e=>{ e.stopPropagation(); toggleFavorite(c); };
+    const wt=el('button','mini-btn primary'+(inWatchlist(c.id)?' on':''), inWatchlist(c.id)?'✓ 待看中':'＋ 待看');
+    wt.onclick=e=>{ e.stopPropagation(); if(inWatchlist(c.id)) openPlan(c); else addToWatchlist(c); };
+    act.appendChild(fav); act.appendChild(wt);
+    card.appendChild(act);
+    card.appendChild(el('div','go','去选座 →'));
+    card.onclick=()=>{ state.activeConcert=c; switchView('detail'); };
+    box.appendChild(card);
+  });
+  box.appendChild(renderFavorites());
+}
+
+function renderFavorites(){
+  const wrap=el('div','fav-sec');
+  wrap.appendChild(el('div','sec-head',`<span class="sec-caret">▸</span> 🗂 收藏夹（${favorites.length}）`));
+  const body=el('div','sec-body');
+  body.style.display='none';
+  if(!favorites.length){
+    body.appendChild(el('div','empty-hint','<span class="em">💗</span>还没收藏哦<br>在演出卡片上点「☆ 收藏」'));
+  } else {
+    favorites.forEach(id=>{
+      const c=CONCERTS.find(c=>c.id===id); if(!c) return;
+      const row=el('div','fav-row');
+      row.appendChild(el('div','fav-main',`<span style="font-size:18px">${c.emoji}</span> <b>${c.artist}</b> <span style="color:var(--ink-soft);font-size:12px">${c.city} · ${c.date}</span>`));
+      const btns=el('div','fav-btns');
+      const go=el('button','mini-btn','去选座 →');
+      go.onclick=()=>{ state.activeConcert=c; switchView('detail'); };
+      const del=el('button','mini-btn danger','取消收藏');
+      del.onclick=()=>toggleFavorite(c);
+      btns.appendChild(go); btns.appendChild(del);
+      row.appendChild(btns);
+      body.appendChild(row);
+    });
+  }
+  wrap.appendChild(body);
+  wrap.querySelector('.sec-head').onclick=()=>{
+    const opened=body.style.display!=='none';
+    body.style.display=opened?'none':'';
+    wrap.querySelector('.sec-caret').textContent=opened?'▸':'▾';
+  };
+  return wrap;
+}
+
+function renderPlans(){
+  const box=$('#tripPanel'); box.innerHTML='';
+  box.appendChild(el('div','trip-head','🎒 我的观演计划'));
+  if(!watchlist.length){
+    box.appendChild(el('div','empty-hint','<span class="em">🎟️</span>还没有观演计划哦<br>去「推荐」里点一场，加入待看吧'));
+  } else {
+    watchlist.forEach(w=>{
+      const c=CONCERTS.find(c=>c.id===w.id); if(!c) return;
+      const days=daysUntil(c.date);
+      const plan=w.plan;
+      const done=plan?plan.tasks.filter(t=>t.done).length:0;
+      const total=plan?plan.tasks.length:0;
+      const next=plan?plan.tasks.find(t=>!t.done):null;
+      const card=el('div','trip-card');
+      const t1=el('div','t1',`<span style="font-size:18px">${c.emoji}</span>${c.artist} · ${c.city}<span class="trip-days">${dLabel(days)}</span>`);
+      const x=el('button','trip-x','✕');
+      x.onclick=e=>{ e.stopPropagation(); removeFromWatchlist(c.id); };
+      t1.appendChild(x);
+      card.appendChild(t1);
+      card.appendChild(el('div','t2',`${c.date} · <span class="spill mini${w.status==='ticketed'?' on':''}">${statusLabel(w.status)||'准备抢票'}</span>`));
+      if(plan){
+        card.appendChild(el('div','plan-bar',`<div class="bar"><i style="width:${total?Math.round(done/total*100):0}%"></i></div><span>${done}/${total}</span>`));
+        card.appendChild(el('div','plan-next',`下一步 · ${next?next.title:'收尾'}`));
+      } else {
+        card.appendChild(el('div','plan-next','尚未生成计划'));
+      }
+      const act=el('div','card-actions');
+      if(plan){
+        const go=el('button','mini-btn primary','继续计划 →');
+        go.onclick=e=>{ e.stopPropagation(); openPlan(c); };
+        act.appendChild(go);
+      } else {
+        const gen=el('button','mini-btn primary','✨ 生成计划');
+        gen.onclick=e=>{ e.stopPropagation(); const ww=ensureWatch(c); if(!ww.status) ww.status='ticketing'; generatePlan(c,ww); openPlan(c); };
+        act.appendChild(gen);
+      }
+      card.appendChild(act);
+      card.onclick=()=>{ if(w.plan) openPlan(c); else { state.activeConcert=c; switchView('detail'); } };
+      box.appendChild(card);
+    });
+  }
+  // 我的群聊
+  box.appendChild(el('div','trip-head','💬 我的群聊'));
+  const joinedList = watchlist.filter(w=>isJoined(w.id)).map(w=>CONCERTS.find(c=>c.id===w.id)).filter(Boolean);
+  if(!joinedList.length){
+    box.appendChild(el('div','empty-hint','<span class="em">💬</span>加入场次粉丝群<br>找搭子、拼车、看现场情报。'));
+  } else {
+    joinedList.forEach(c=>{
+      const g=el('div','my-group');
+      g.appendChild(el('div','mg-ava',c.emoji));
+      g.appendChild(el('div','mg-main',`<div class="mg-t">${c.artist}·${c.city} 2群</div><div class="mg-s">#拼车·18条新消息 · 「有没有虹桥一起走的姐妹……」</div>`));
+      const x=el('button','mg-x','✕'); x.title='退出群聊';
+      x.onclick=e=>{ e.stopPropagation(); leaveCommunity(c); };
+      g.appendChild(x);
+      g.onclick=()=>{ state.activeConcert=c; state.detailTab='community'; switchView('detail'); };
+      box.appendChild(g);
+    });
+  }
+}
+
+/* ================= 推荐 / 选座打分 ================= */
+function score(t, key){
+  if(key==='close') return t.close*0.7 + t.view*0.2 + t.sound*0.1;
+  if(key==='sound') return t.sound*0.6 + t.view*0.25 + t.close*0.15;
+  return (t.view*0.35 + t.sound*0.35 + t.close*0.3) / (t.price/100);
+}
+function recommend(c){
+  c = c || state.activeConcert || CONCERTS[0];
+  const key=PREFS[state.prefLabel] || PREFS[(profile && profile.pref)] || 'value';
+  const max=BUDGETS[profile ? profile.budget : '不限'];
+  const tiers=c.tiers.map(tierObj);
+  const within=tiers.filter(t=>t.price<=max);
+  const pool=within.length?within:tiers;
+  const scored=pool.map(t=>({t, s:score(t,key)})).sort((a,b)=>b.s-a.s);
+  const best=scored[0].t;
+  let upg=null;
+  if(within.length && within.length<tiers.length){
+    const above=tiers.filter(t=>t.price>max).sort((a,b)=>a.price-b.price)[0];
+    if(above) upg=above;
+  }
+  let alt=null;
+  if(scored.length>1) alt=scored[1].t;
+  else if(upg) alt=upg;
+  else alt=scored[0].t;
+  const reason = buildReason(best, key);
+  const upgrade = upg ? `想要更好一点？从「${best.name}」（¥${best.price}）加 <b>¥${upg.price - best.price}</b> 可上「${upg.name}」（¥${upg.price}）——${upg.tip}。` : '';
+  return { tiers, best, alt, reason, upgrade, key };
+}
+function buildReason(t, key){
+  const b=profile ? profile.budget : '不限';
+  if(key==='close') return `在 <b>${b}</b> 内，这档离舞台最近（距离 <b>${t.close}/10</b>、视野 <b>${t.view}/10</b>）。${t.tip}。`;
+  if(key==='sound') return `这档声场最均衡（音响 <b>${t.sound}/10</b>、视野 <b>${t.view}/10</b>），听得最舒服。${t.tip}。`;
+  return `综合「视野 ${t.view} · 音响 ${t.sound} · 距离 ${t.close}」除以票价，性价比最高的一档。${t.tip}。`;
+}
+
+/* ================= 剖面图 ================= */
+const CROSS = {
+  vip:  {x:101, y:179, label:'内场VIP', rect:[80,172,42,14],  fill:'#ffd3e0', stroke:'#ff6b9d'},
+  back: {x:149, y:179, label:'内场后区', rect:[128,172,42,14], fill:'#ffe0d3', stroke:'#ff9a76'},
+  a:    {x:205, y:152, label:'看台A', rect:[180,146,50,40], fill:'#d3e8ff', stroke:'#5cb8ff'},
+  b:    {x:261, y:112, label:'看台B', rect:[236,106,50,80], fill:'#d3f5ec', stroke:'#3fd0a8'},
+  top:  {x:317, y:72,  label:'山顶', rect:[292,66,50,120],  fill:'#efe6f7', stroke:'#a06bff'},
+};
+const ZONE_OF = { '内场VIP':'vip','内场后区':'back','看台A区':'a','看台B区':'b','山顶':'top' };
+function crossSectionHTML(tiers, selectedName){
+  const byZone={}; tiers.forEach(t=>{ byZone[ZONE_OF[t.name]]=t; });
+  const selKey=ZONE_OF[selectedName]||'a';
+  let s='<svg viewBox="0 0 360 216" style="width:100%;height:auto;display:block;border-radius:14px;background:#fffdf8">';
+  s+='<line x1="12" y1="186" x2="348" y2="186" stroke="#e7dded" stroke-width="2"/>';
+  s+='<rect x="16" y="142" width="56" height="44" rx="4" fill="#3a2e45"/>';
+  s+='<rect x="16" y="142" width="56" height="5" fill="#a06bff"/>';
+  s+='<circle cx="44" cy="120" r="8" fill="#1a1425"/>';
+  s+='<rect x="34" y="129" width="20" height="13" rx="6" fill="#1a1425"/>';
+  s+='<text x="44" y="168" text-anchor="middle" font-size="10" fill="#ffffff" font-weight="700">舞台</text>';
+  Object.keys(CROSS).forEach(k=>{
+    const t=byZone[k]; if(!t) return;
+    const z=CROSS[k], sel=(k===selKey), r=z.rect;
+    s+=`<rect x="${r[0]}" y="${r[1]}" width="${r[2]}" height="${r[3]}" rx="5" fill="${z.fill}" stroke="${z.stroke}" stroke-width="${sel?3:1.5}"/>`;
+    const labY=(k==='vip'||k==='back') ? r[1]-4 : r[1]+16;
+    s+=`<text x="${z.x}" y="${labY}" text-anchor="middle" font-size="10" font-weight="700" fill="#5a4a6a">${z.label}</text>`;
+  });
+  const a=CROSS[selKey];
+  s+=`<line x1="${a.x}" y1="${a.y}" x2="44" y2="120" stroke="${a.stroke}" stroke-width="2" stroke-dasharray="5 4" opacity="0.8"/>`;
+  s+=`<circle cx="${a.x}" cy="${a.y}" r="13" fill="none" stroke="${a.stroke}" stroke-width="2.5"><animate attributeName="r" values="9;15;9" dur="1.8s" repeatCount="indefinite"/><animate attributeName="opacity" values="0.8;0.1;0.8" dur="1.8s" repeatCount="indefinite"/></circle>`;
+  s+=`<circle cx="${a.x}" cy="${a.y}" r="7" fill="${a.stroke}" stroke="#fff" stroke-width="2"/>`;
+  s+=`<text x="${a.x<300?a.x+14:a.x-14}" y="${a.y-10}" text-anchor="${a.x<300?'start':'end'}" font-size="11" font-weight="800" fill="${a.stroke}">你</text>`;
+  s+='<text x="120" y="202" text-anchor="middle" font-size="10" fill="#9b8faa">内场 · 平层（后排易被挡）</text>';
+  s+='<text x="255" y="202" text-anchor="middle" font-size="10" fill="#9b8faa">看台 · 阶梯（视线好·较远）</text>';
+  return s+'</svg>';
+}
+
+/* ================= 待看 / 收藏 / 计划 ================= */
+function inWatchlist(id){ return watchlist.some(w=>w.id===id); }
+function getWatch(id){ return watchlist.find(w=>w.id===id); }
+function isFav(id){ return favorites.includes(id); }
+function toggleFavorite(c){
+  if(favorites.includes(c.id)) favorites = favorites.filter(id=>id!==c.id);
+  else favorites.push(c.id);
+  saveState();
+  if(state.view==='detail') renderDetail();
+  else renderMain();
+  toast(favorites.includes(c.id) ? `★ 已加入收藏 · ${c.artist}` : '已取消收藏');
+}
+function ensureWatch(c){
+  let w=getWatch(c.id);
+  if(!w){ w={ id:c.id, tier:null, status:'ticketing', checklist:[false,false,false,false,false,false], addedAt:Date.now() }; watchlist.push(w); saveState(); }
+  return w;
+}
+function ensurePack(w){
+  if(!w.pack) w.pack = PACKING.map(t=>({txt:t, done:false}));
+  return w.pack;
+}
+function addToWatchlist(c){
+  openWatchModal(c);
+}
+function removeFromWatchlist(id){
+  watchlist = watchlist.filter(w=>w.id!==id);
+  if(community[id]) community[id].joined = false;
+  saveState();
+  if(state.view==='detail') renderDetail();
+  else renderMain();
+  toast('已取消待看');
+}
+function activePlan(){
+  const wl = watchlist.filter(w=>w.plan);
+  let w = (state.activeConcert && wl.find(w=>w.id===state.activeConcert.id)) || wl[0];
+  if(!w) return null;
+  const c = CONCERTS.find(c=>c.id===w.id) || CONCERTS[0];
+  return { c, w, plan: w.plan };
+}
+function openPlan(c){
+  state.activeConcert=c;
+  const w=getWatch(c.id);
+  if(w && !w.plan) generatePlan(c, w);
+  state.planStage='prep'; state.planNode=null; state.journeySel=null;
+  switchView('plan');
+  enterPlanRefresh(c);
+}
+function enterPlanRefresh(c){
+  toast('✨ 小星正在看看有没有新变化…');
+  setTimeout(()=>{
+    const w=c && getWatch(c.id);
+    const rain = w && w.plan && w.plan.weather && w.plan.weather.rain>=60;
+    toast(rain ? '🌧️ 小星发现一项新变化：演出当天可能有雨' : '✓ 一切按计划进行，没有新变化');
+  }, 600);
+}
+function generatePlan(c, w){
+  if(!w.status) w.status='ticketing';
+  w.plan = buildPlan(c, w);
+  saveState();
+}
+function setStatus(w, id){
+  const prev = w.status;
+  if(id==='ticketed' && prev!=='ticketed'){
+    w.status='ticketed';
+    const t=w.plan && w.plan.tasks.find(t=>t.key==='ticket'); if(t) t.done=true;
+    if(w.plan && w.plan.rec) w.tier = w.tier || w.plan.rec.best.name;
+    saveState(); rerender();
+    toast('🎫 已经有票啦！抢票任务我帮你收起来了，之前安排好的住宿、交通和行程都还在。');
+  } else if(id==='ticketing' && prev==='ticketed'){
+    confirmReverseStatus(w);
+  } else if(id!==prev){
+    w.status=id;
+    saveState(); rerender();
+    toast('状态已更新为「'+statusLabel(id)+'」');
+  }
+}
+function confirmReverseStatus(w){
+  const m=el('div','overlay');
+  const box=el('div','modal');
+  box.innerHTML = `<h3>🔄 切换回「准备抢票」？</h3>
+    <div class="msub">切换后会重新显示抢票相关任务，之前的住宿、交通和行程不会被删除。</div>
+    <div class="modal-cta">
+      <button class="btn-big" id="rYes">确认切换</button>
+      <button class="btn-ghost" id="rNo">取消</button>
+    </div>`;
+  m.appendChild(box); document.body.appendChild(m);
+  box.querySelector('#rYes').onclick=()=>{ w.status='ticketing'; const t=w.plan&&w.plan.tasks.find(t=>t.key==='ticket'); if(t) t.done=false; saveState(); closeOverlay(); rerender(); toast('已切换回「准备抢票」'); };
+  box.querySelector('#rNo').onclick=()=>closeOverlay();
+  m.onclick=e=>{ if(e.target===m) closeOverlay(); };
+}
+
+/* ================= 生成 AI 观演计划 ================= */
+function weatherFor(c){ return Object.assign({}, WEATHER_MOCK, { adjustments:[{txt:'Checklist 新增「雨伞」'},{txt:'出发时间提前 15 min'},{txt:'户外拍照时间缩短 20 min'}] }); }
+function agentSummary(c, tasks, days){
+  const undone = tasks.filter(t=>!t.done);
+  if(!undone.length) return `距演出还有 ${days} 天，行前的事都安排好啦，就等演出当天出发去见 ${c.artist}。`;
+  const next = undone[0];
+  const map = { ticket:'确定抢票策略', hotel:'确定住宿', transport:'确认城际交通', weather:'关注天气', checklist:'做行前检查' };
+  return `距演出还有 ${days} 天，接下来先做这件事：「${map[next.key]||next.title}」。我会根据天气、交通和你的计划变化随时更新。`;
+}
+function buildJourney(c, hotel){
+  const fromTitle = hotel ? '从'+hotel.name+'出发' : '从住处出发（住宿待定）';
+  const fromSub = hotel ? '步行 4 min 到地铁站' : '选定酒店后自动更新出发路线';
+  return [
+    { t:'15:40', emoji:'🏨', title:fromTitle, sub:fromSub, poi:'hotel' },
+    { t:'15:45', emoji:'🚇', title:'××地铁站', sub:'地铁 18 min', poi:'metro' },
+    { t:'16:10', emoji:'🍜', title:'演出前吃饭', sub:'老上海面馆 · 距场馆 400m', poi:'noodle' },
+    { t:'17:00', emoji:'📸', title:'场馆打卡 / 领周边', sub:'场馆外应援区', poi:'photo' },
+    { t:'17:40', emoji:'🛂', title:'排队安检', sub:'建议轻装，减少排队', poi:'security' },
+    { t:'18:30', emoji:'🎫', title:'建议入场', sub:'留出找座 + 缓冲时间', poi:'entry' },
+    { t:'19:30', emoji:'🎤', title:'演出开始', sub:c.artist+' · '+c.tour, poi:'stage' },
+    { t:'22:10', emoji:'🎉', title:'预计散场', sub:'按演出 2h40min 估算', poi:'end' },
+  ];
+}
+function buildReturnJourney(c, hotel){
+  const endTitle = hotel ? '返回'+hotel.name : '返回住处';
+  return [
+    { t:'22:20', emoji:'🚶', title:'前往返程站点', sub:'最近地铁站拥挤，步行至 XX 站', poi:'walk' },
+    { t:'23:10', emoji:'🏨', title:endTitle, sub:'建议提前订好网约车', poi:'hotel' },
+  ];
+}
+function buildPlan(c, w){
+  const rec=recommend(c);
+  const wx=weatherFor(c);
+  const days=daysUntil(c.date);
+  const tasks=[];
+  const push=(key,emoji,title,when,desc,stage)=>tasks.push({key,emoji,title,when,desc,stage,done:false});
+  push('ticket','🎫','确定抢票策略','现在','首选 '+rec.best.name+' · 备选 '+rec.alt.name,'prep');
+  push('hotel','🏨','住宿规划','尽快完成','确定场馆附近 / 地铁沿线 / 返程方便的酒店','prep2');
+  push('transport','🚄','城际交通确认','尽快完成','根据所在地与演出城市给出交通建议','prep2');
+  push('weather','🌦','天气与穿搭','D-3','演出前 3 天自动更新 · '+wx.temp+' '+wx.cond,'prep2');
+  push('checklist','🎒','行前检查','D-1','整理随身物品 · 检查门票与证件','prep2');
+  return {
+    summary: agentSummary(c, tasks, days),
+    tasks,
+    journey: buildJourney(c, null),
+    returnJourney: buildReturnJourney(c, null),
+    weather: wx,
+    hotel: null,
+    noHotel: false,
+    transport: null,
+    pois: [],
+    rec: { best: rec.best, alt: rec.alt },
+  };
+}
+
+/* ================= 加入待看 Modal ================= */
+function closeOverlay(){ document.querySelectorAll('.overlay, .drawer-overlay').forEach(o=>o.remove()); }
+function statusSel(c){ const w=getWatch(c.id); return w ? w.status : 'ticketing'; }
+function openWatchModal(c){
+  const days=daysUntil(c.date);
+  const m=el('div','overlay');
+  const box=el('div','modal');
+  box.innerHTML = `
+    <h3>🎤 已加入「${c.artist} · ${c.city}站」</h3>
+    <div class="msub">${c.tour} · ${c.date}<br>距离演出还有 <b>${dLabel(days)}</b></div>
+    <div class="modal-lab">当前状态</div>
+    <div class="status-pills big" id="mwPills">${STATUS.map(s=>`<span class="spill${statusSel(c)===s.id?' on':''}" data-s="${s.id}">${s.label}</span>`).join('')}</div>
+    <div class="modal-cta">
+      <button class="btn-big" id="mwGen">✨ 生成 AI 观演计划</button>
+      <button class="btn-ghost" id="mwLater">稍后再说</button>
+    </div>`;
+  m.appendChild(box);
+  document.body.appendChild(m);
+  let sel = statusSel(c) || 'ticketing';
+  box.querySelectorAll('#mwPills .spill').forEach(p=>{
+    p.onclick=()=>{ sel=p.dataset.s; box.querySelectorAll('#mwPills .spill').forEach(x=>x.classList.toggle('on',x===p)); };
+  });
+  box.querySelector('#mwGen').onclick=()=>{ confirmWatch(c, sel, true); };
+  box.querySelector('#mwLater').onclick=()=>{ confirmWatch(c, sel, false); };
+  m.onclick=e=>{ if(e.target===m) closeOverlay(); };
+}
+function confirmWatch(c, status, gen){
+  const w=ensureWatch(c);
+  w.status=status;
+  if(gen) generatePlan(c,w);
+  saveState();
+  closeOverlay();
+  if(gen){ state.activeConcert=c; openPlan(c); }
+  else renderMain();
+  toast(gen?'✨ AI 观演计划已生成':'已加入待看 · '+statusLabel(status));
+}
+
+/* ================= 详情页 ================= */
+function renderDetail(){
+  const v=$('#view'); v.innerHTML='';
+  const c=state.activeConcert || CONCERTS[0];
+  state.activeConcert=c;
+  state.focusTier=null;
+  const watching = inWatchlist(c.id);
+  const faved = isFav(c.id);
+  const tabs=[['seat','💺 选座建议'],['host','🎒 陪你走到线下'],['poi','🗺 场馆周边'],['community','👥 粉丝社群']];
+  v.innerHTML = `<div class="detail-wrap">
+    <div class="detail-top">
+      <button class="back" id="backBtn">← 返回</button>
+      <div class="dt-main">
+        <div class="dt-title"><span class="dt-emoji">${c.emoji}</span> ${c.artist} <span class="dt-tour">${c.tour}</span></div>
+        <div class="dt-meta">📍 ${c.city} · ${c.venue}　🗓 ${c.date}</div>
+      </div>
+      <button class="fav-btn" id="favBtn">${faved?'★ 已收藏':'☆ 收藏'}</button>
+      <button class="watch-btn" id="watchBtn">${watching?'✓ 待看中':'＋ 待看'}</button>
+    </div>
+    <div class="detail-tabs" id="detailTabs">${tabs.map(t=>`<button class="pref-btn${state.detailTab===t[0]?' on':''}" data-tab="${t[0]}">${t[1]}</button>`).join('')}</div>
+    <div class="stage-desc" style="margin:0 2px 12px">这里是「了解」：这场演出、这个场馆和周边是什么情况 —— 想清楚值不值得去、怎么选。</div>
+    <div class="card" id="detailMain"></div>
+  </div>`;
+  $('#backBtn').onclick=()=>switchView(state.from || 'home');
+  $('#watchBtn').onclick=()=>{ if(watching) openPlan(c); else addToWatchlist(c); };
+  $('#favBtn').onclick=()=>toggleFavorite(c);
+  $('#detailTabs').querySelectorAll('.pref-btn').forEach(b=>{
+    b.onclick=()=>{
+      state.detailTab=b.dataset.tab;
+      $('#detailTabs').querySelectorAll('.pref-btn').forEach(x=>x.classList.toggle('on', x===b));
+      renderDetailMain(c);
+    };
+  });
+  renderDetailMain(c);
+}
+
+function renderDetailMain(c){
+  const main=$('#detailMain'); if(!main) return;
+  main.innerHTML='';
+  const tab=state.detailTab || 'seat';
+  if(tab==='seat') renderSeat(main, c);
+  else if(tab==='host') renderHost(main, c);
+  else if(tab==='poi') renderVenueAround(main, c);
+  else renderCommunity(main, c);
+}
+
+function renderSeat(box, c){
+  box.innerHTML='';
+  box.appendChild(el('div','panel-head','💺 选座决策 · 选对了，这一场才值回票价'));
+  const body=el('div','seat-body'); box.appendChild(body);
+  const sw=el('div','pref-switch');
+  PREF_OPTS.forEach(p=>{
+    const b=el('button','pref-btn'+(state.prefLabel===p?' on':''),p);
+    b.onclick=()=>{ state.prefLabel=p; renderSeat(box,c); };
+    sw.appendChild(b);
+  });
+  body.appendChild(sw);
+
+  const r=recommend(c);
+  const preview = r.tiers.find(t=>t.name===state.focusTier) || r.best;
+
+  const rc=el('div','rec-card');
+  rc.appendChild(el('div','lbl','✨ 小星推荐'));
+  rc.appendChild(el('div','name',`${r.best.name}（${r.best.area}）`));
+  rc.appendChild(el('div','price',`¥${r.best.price}`));
+  rc.appendChild(el('div','reason',r.reason));
+  if(r.upgrade) rc.appendChild(el('div','upg',r.upgrade));
+  body.appendChild(rc);
+
+  body.appendChild(el('div','lbl','👀 你的视角（点下面档位切换）'));
+  const vw=el('div',''); vw.innerHTML=crossSectionHTML(r.tiers, preview.name);
+  body.appendChild(vw);
+  body.appendChild(el('div','view-caption',`<b>${preview.name}</b>（${preview.area}）· 距离舞台 <b>${preview.close}/10</b> · 视野 <b>${preview.view}/10</b> —— ${preview.tip}`));
+
+  body.appendChild(el('div','lbl',`${profile ? profile.budget : '不限'}内 · 各档位对比`));
+  r.tiers.forEach(t=>{
+    const rec = t===r.best;
+    const prev = t.name===preview.name;
+    const row=el('div','tier-row'+(rec?' rec':'')+(prev?' preview':''));
+    row.appendChild(el('div','t1',`<span class="tname">${t.name}</span><span style="font-size:11px;color:var(--ink-soft)">${t.area}</span>${rec?'<span class="badge">推荐</span>':''}${prev?'<span class="badge" style="background:var(--violet)">👀</span>':''}<span class="tprice">¥${t.price}</span>`));
+    [['视野',t.view,'var(--sky)'],['音响',t.sound,'var(--mint)'],['距离',t.close,'var(--coral)']].forEach(([lab,val,col])=>{
+      row.appendChild(el('div','bar-line',`<span class="bl">${lab}</span><span class="bar"><i style="width:${val*10}%;background:${col}"></i></span><span class="bv">${val}</span>`));
+    });
+    row.onclick=()=>{ state.focusTier=t.name; renderSeat(box,c); };
+    body.appendChild(row);
+  });
+}
+
+function safeBest(c){
+  try { if(profileDone()) return recommend(c).best; } catch(e){}
+  return tierObj(c.tiers[0]);
+}
+function transportOptions(home, city){
+  if(!home) return [{mode:'🏡 先填所在地', time:'—', cost:'—', tip:'去「我的主页」填一下「所在地」，我就能帮你算高铁/飞机怎么去最划算'}];
+  if(home===city){
+    return [{mode:'🚇 地铁 / 打车', time:'约 40 分钟', cost:'¥10-50', tip:'同城去看～ 散场人多，建议提前叫车或走一站再打车'}];
+  }
+  return [
+    {mode:'🚄 高铁', time:'约 8-9 小时', cost:'¥500-600', tip:'到站转地铁直达场馆，最省心'},
+    {mode:'✈️ 飞机', time:'约 3 小时（含机场往返）', cost:'¥800-1500', tip:'时间紧选这个，记得把机场往返时间算进去'},
+    {mode:'🚌 火车硬卧 / 大巴', time:'约 12 小时+', cost:'¥200-350', tip:'预算最低，适合提前一天到、当夜车还能省一晚住宿'},
+    {mode:'🚗 自驾', time:'约 15 小时', cost:'油费+过路费 ¥700+', tip:'灵活自由，散场不用挤地铁，注意停车和疲劳驾驶'},
+  ];
+}
+function hostSection(key, title, emoji, fill, open){
+  const sec=el('section','host-sec');
+  if(key) sec.dataset.sec=key;
+  const head=el('div','sec-head', `<span class="sec-caret">${open?'▾':'▸'}</span> ${emoji} ${title}`);
+  const body=el('div','sec-body');
+  if(!open) body.style.display='none';
+  fill(body);
+  head.onclick=()=>{
+    const opened=body.style.display!=='none';
+    body.style.display=opened?'none':'';
+    head.querySelector('.sec-caret').textContent=opened?'▸':'▾';
+  };
+  sec.appendChild(head); sec.appendChild(body);
+  return sec;
+}
+function renderHost(box, c){
+  box.innerHTML='';
+  box.appendChild(el('div','panel-head','🎒 陪你走进演唱会'));
+  const body=el('div','host-body'); box.appendChild(body);
+
+  body.appendChild(hostSection('checklist','抢票 checklist','✅',(b)=>{
+    const items=[
+      ['提前填好实名 + 收货信息','开票前 1 天完成，抢票时不用现填'],
+      ['绑定支付方式','支付宝 / 微信 设好免密，付款快人一步'],
+      ['连上稳定网络','5G 或家用 Wi-Fi，别用公共 Wi-Fi'],
+      ['设备 + 浏览器就位','电脑手机双开，官方 App 更稳'],
+      ['定好闹钟','开票前 10 分钟进页面蹲守，提前登录'],
+      ['备好 Plan B','同场馆多档位、多平台比价，别只盯一个'],
+    ];
+    const cl=el('div','checklist');
+    items.forEach(([t,s],i)=>{
+      const w=getWatch(c.id);
+      const checked = w ? w.checklist[i] : false;
+      const row=el('div','check'+(checked?' done':''), `<input type="checkbox"${checked?' checked':''}><div class="ct">${t}<small>${s}</small></div>`);
+      row.onclick=()=>{
+        const ww=ensureWatch(c);
+        ww.checklist[i]=!ww.checklist[i];
+        saveState();
+        const cb=row.querySelector('input'); cb.checked=ww.checklist[i];
+        row.classList.toggle('done', ww.checklist[i]);
+      };
+      cl.appendChild(row);
+    });
+    b.appendChild(cl);
+  }, true));
+
+  body.appendChild(hostSection('transport','出行方式','🚄',(b)=>{
+    const home = profile ? profile.home : null;
+    b.appendChild(el('div','view-caption', home ? `从 <b>${home}</b> → <b>${c.city}</b> 去看 ${c.artist}，几种走法：` : '先填「所在地」，我就能帮你算怎么去最划算 👇'));
+    transportOptions(home, c.city).forEach(t=>{
+      b.appendChild(el('div','transport-card', `<div class="n">${t.mode}　<span class="d">${t.time} · ${t.cost}</span></div><div class="tip">${t.tip}</div>`));
+    });
+    b.appendChild(el('div','pf-foot','💡 具体选哪一班、几点出发，去「AI 观演计划 → 行前准备 → 城际交通」里定下来。'));
+  }, false));
+
+  body.appendChild(hostSection('security','安检须知','🛂',(b)=>{
+    SECURITY.forEach(([em,ok,txt])=>{
+      b.appendChild(el('div','sec-item '+(ok==='ok'?'ok':'no'), `<span class="em">${em}</span><div>${txt}</div>`));
+    });
+  }, false));
+
+  body.appendChild(hostSection('ribbon','应援飘带注意','🎀',(b)=>{
+    RIBBON.forEach(txt=>{
+      b.appendChild(el('div','sec-item ok', `<span class="em">🎀</span><div>${txt}</div>`));
+    });
+  }, false));
+
+  body.appendChild(hostSection('hotel','周边酒店','🏨',(b)=>{
+    b.appendChild(el('div','view-caption','这只是「了解」层面的酒店攻略。要真正定下住哪家、加进计划，去「AI 观演计划 → 行前准备 → 住宿」，小星会帮你挑。'));
+    HOTEL_GROUPS.forEach(g=>{
+      const card=el('div','hotel-group');
+      card.appendChild(el('div','hg-head',`<span class="em">${g.em}</span> <b>${g.name}</b> <span class="cnt">${g.count} 家</span>`));
+      card.appendChild(el('div','hg-sub',`${g.sub} · ${g.desc}`));
+      const items=el('div','hg-items');
+      g.items.forEach(it=>{ items.appendChild(el('div','hg-item',it)); });
+      card.appendChild(items);
+      b.appendChild(card);
+    });
+  }, false));
+
+  body.appendChild(hostSection('copy','晒票 / 安利文案','📣',(b)=>{
+    const t=safeBest(c);
+    const copies=[
+      ['📣 朋友圈晒票文案',
+        `抢到了！！🎫 ${c.artist}${c.tour} · ${c.date}，我在${c.venue}的${t.name}（¥${t.price}）等你！谁懂啊这一刻等了整整一年😭✨ #演唱会 #值回票价`],
+      ['💗 安利文案',
+        `还有人没听过${c.artist}的现场吗？${c.date}在${c.venue}，现在${t.name}还有票！想一起冲的姐妹私我，冲！🔥 #${c.artist}演唱会`],
+      ['✨ 灯牌 / 手幅文案',
+        `${c.artist} ✨ 我永远为你而来 💖\n（备用：我的青春叫${c.artist} · 你在台上，我在灯海`],
+    ];
+    copies.forEach(([h,txt])=>{
+      const card=el('div','copy-card');
+      card.appendChild(el('div','h',h));
+      card.appendChild(el('div','txt',txt.replace(/\n/g,'<br>')));
+      const b2=el('button','btn-copy','复制');
+      b2.onclick=()=>copyText(txt, b2);
+      card.appendChild(b2);
+      b.appendChild(card);
+    });
+  }, false));
+
+  const focus = state.hostFocus;
+  if(focus){
+    state.hostFocus = null;
+    const sec = box.querySelector(`[data-sec="${focus}"]`);
+    if(sec){
+      const bd = sec.querySelector('.sec-body');
+      if(bd && bd.style.display==='none'){ bd.style.display=''; const caret=sec.querySelector('.sec-caret'); if(caret) caret.textContent='▾'; }
+      setTimeout(()=>{ try{ sec.scrollIntoView({behavior:'smooth', block:'start'}); }catch(e){} }, 80);
+    }
+  }
+}
+
+function isJoined(cid){ return community && community[cid] && community[cid].joined; }
+function joinCommunity(c){
+  if(!community[c.id]) community[c.id]={};
+  community[c.id].joined=true;
+  saveState();
+  if(state.view==='detail') renderDetailMain(c);
+  else renderMain();
+  toast('🎉 已加入场次群 · '+c.artist+' '+c.city+'站');
+}
+function leaveCommunity(c){
+  if(community[c.id]) community[c.id].joined=false;
+  saveState();
+  renderMain();
+  toast('已退出场次群');
+}
+function renderCommunity(box, c){
+  box.innerHTML='';
+  box.appendChild(el('div','panel-head',`👥 ${c.artist} ${c.city}站 · 粉丝社群`));
+  const body=el('div','community'); box.appendChild(body);
+
+  body.appendChild(el('div','com-head',`<span>${c.emoji}</span><div><b>${c.artist} · ${c.tour}</b><div class="s">3,218 人在线 · 都是要去看这一场的人</div></div>`));
+
+  if(!isJoined(c.id)){
+    const jc=el('div','join-card');
+    jc.appendChild(el('div','jc-title',`👥 ${c.artist}·${c.city}站粉丝群`));
+    jc.appendChild(el('div','jc-sub','3,218 人正在讨论<br>热门：#拼车 #应援 #拼房 #转票'));
+    const jb=el('button','btn-big','加入场次群');
+    jb.onclick=()=>joinCommunity(c);
+    jc.appendChild(jb);
+    body.appendChild(jc);
+    body.appendChild(el('div','lbl','群聊预览'));
+    communityList().slice(0,3).forEach(m=>{
+      body.appendChild(el('div','cmsg',`<div class="cava">${m.ava}</div><div class="cmain"><div class="cmeta"><b>${m.name}</b><span>${m.ch}</span><span class="ct">${m.time}</span></div><div class="cbubble">${m.txt}</div></div>`));
+    });
+    return;
+  }
+
+  body.appendChild(el('div','shard','✓ 已加入 <b>2 群</b>（1,204 人） · 进群找搭子、拼车、看现场情报'));
+  body.appendChild(el('div','lbl','小星帮你挑出的有用信息'));
+  body.appendChild(planLinkDemo(c));
+
+  let curChan='全部';
+  const chans=el('div','chans');
+  COMMUNITY.channels.forEach(ch=>{
+    const chip=el('button','chan-chip'+(ch===curChan?' on':''),ch);
+    chip.onclick=()=>{ curChan=ch; chans.querySelectorAll('.chan-chip').forEach(x=>x.classList.toggle('on',x===chip)); renderMsgs(); };
+    chans.appendChild(chip);
+  });
+  body.appendChild(chans);
+
+  const msgs=el('div','cmsgs');
+  function renderMsgs(){
+    msgs.innerHTML='';
+    const list=communityList().filter(m=>curChan==='全部'||m.ch===curChan);
+    if(!list.length){ msgs.appendChild(el('div','empty-hint','这个频道还没人说话，发一条当第一个吧～')); }
+    list.forEach(m=>{
+      const row=el('div','cmsg');
+      row.appendChild(el('div','cava',m.ava));
+      const main=el('div','cmain');
+      main.appendChild(el('div','cmeta',`<b>${m.name}</b><span>${m.ch}</span><span class="ct">${m.time}</span>`));
+      main.appendChild(el('div','cbubble',m.txt));
+      row.appendChild(main);
+      msgs.appendChild(row);
+    });
+    msgs.scrollTop=msgs.scrollHeight;
+  }
+  body.appendChild(msgs);
+  renderMsgs();
+
+  body.appendChild(el('div','warn','⚠️ 转票 / 拼房 / 拼车请走平台、核实身份，谨防诈骗'));
+
+  const inp=el('input'); inp.type='text'; inp.placeholder='跟大家聊聊（拼房 / 结伴 / 应援…）';
+  const sendBtn=el('button','','➤');
+  const send=()=>{
+    const t=inp.value.trim(); if(!t) return; inp.value='';
+    communityList().push({ch:curChan, name:'我', ava:'🙋‍♀️', txt:t, time:'刚刚'});
+    renderMsgs();
+    if(/(拼房|拼车|搭子|转票|应援|结伴|一起)/.test(t)){
+      setTimeout(()=>{
+        communityList().push({ch:curChan, name:'群友', ava:'🎀', txt:'收到～ 我也在找，私你啦，记得走平台核实身份哦', time:'刚刚'});
+        renderMsgs();
+      }, 750);
+    }
+  };
+  const inputBar=el('div','cinput');
+  inputBar.appendChild(inp); inputBar.appendChild(sendBtn);
+  sendBtn.onclick=send;
+  inp.onkeydown=e=>{ if(e.key==='Enter') send(); };
+  body.appendChild(inputBar);
+}
+function planLinkDemo(c){
+  const wrap=el('div','');
+  const w=getWatch(c.id);
+  const hasPlan = w && w.plan;
+  const items=[
+    { ava:'🚗', who:'追光者', txt:'散场后有人一起去虹桥吗？准备拼车，还有 2 个座。', act:'加入返程备选', poi:'ride' },
+    { ava:'🧳', who:'场馆志愿者', txt:'南门附近有寄存，营业到 23:30，大件行李可以寄存。', act:'保存到计划', poi:'locker' },
+  ];
+  items.forEach(m=>{
+    const card=el('div','sel-card');
+    card.appendChild(el('div','n',`${m.ava} ${m.who}`));
+    card.appendChild(el('div','d',m.txt));
+    const a=el('button','mini-btn primary', m.act);
+    a.onclick=()=>{
+      if(!hasPlan){ toast('先加入待看并生成计划，才能保存'); return; }
+      const poi=VENUE_POIS.find(p=>p.id===m.poi);
+      if(poi){
+        state.activeConcert=c;
+        if(isPoiInPlan(m.poi)) toast('已经保存到计划里啦');
+        else addPoiToPlan(poi);
+      }
+    };
+    card.appendChild(a);
+    wrap.appendChild(card);
+  });
+  return wrap;
+}
+
+/* ================= 场馆周边 ================= */
+function venueOverview(c){
+  return `<div class="overview-card"><div class="ov-title">🏟 场馆周边概览</div>
+    📍 ${c.venue} · 建议至少提前 1h 到场<br>
+    🚇 交通：附近 1-2 站内可达 · 散场 30 min 人流高峰，走一站再进站更快<br>
+    🍜 餐饮：场馆内 + 周边商圈 30+ 家 · 演出前 2h 排队高峰<br>
+    🏨 住宿：步行 10 min 内 12 家 · 近地铁 8 家 · 最多人订 5 家<br>
+    🧳 寄存：南门寄存处 · 营业至 23:30 · ¥20/件<br>
+    📸 打卡 / 应援：正门应援区光线好 · 官方周边店演出日 13:00 开<br>
+    🛂 安检：轻装入场更快，大型灯牌 / 自拍杆 / 瓶装水不能带<br>
+    🌙 散场提醒：提前叫车或走一站，别堵在场馆门口</div>`;
+}
+function venueMapSVG(c, curCat){
+  const list = VENUE_POIS.filter(p=>curCat==='全部'||p.cat===curCat);
+  let s='<svg viewBox="0 0 620 300" class="rmap">';
+  s+='<rect width="620" height="300" fill="#fffdf8"/>';
+  s+='<circle cx="340" cy="110" r="26" fill="#f3edff" stroke="#a06bff" stroke-width="2"/><text x="340" y="117" text-anchor="middle" font-size="20">🏟</text>';
+  s+='<text x="340" y="148" text-anchor="middle" font-size="11" font-weight="700" fill="#5a4a6a">'+c.venue+'</text>';
+  list.forEach(p=>{
+    const x=p.pos[0], y=p.pos[1];
+    s+=`<line x1="340" y1="110" x2="${x}" y2="${y}" stroke="#e7dded" stroke-width="1.5" stroke-dasharray="4 4"/>`;
+    s+=`<g class="poi-node" data-id="${p.id}" style="cursor:pointer"><circle cx="${x}" cy="${y}" r="15" fill="#fff" stroke="#d9c9ec" stroke-width="2"/><text x="${x}" y="${y+5}" text-anchor="middle" font-size="13">${p.emoji}</text><text x="${x}" y="${y-18}" text-anchor="middle" font-size="9" font-weight="700" fill="#7a6f8a">${p.name}</text></g>`;
+  });
+  s+='<text x="310" y="292" text-anchor="middle" font-size="10" fill="#b9aec4">Demo · 示意地图（非真实地图）</text>';
+  return s+'</svg>';
+}
+function renderVenueAround(box, c, noHead){
+  box.innerHTML='';
+  if(!noHead) box.appendChild(el('div','panel-head',`🗺 场馆周边 · ${c.venue}`));
+  const body=el('div','poi-wrap'); box.appendChild(body);
+  body.appendChild(el('div','overview-card', venueOverview(c)));
+
+  let curCat='全部', selId=null;
+  const chips=el('div','chans');
+  POI_CATS.forEach(cat=>{
+    const chip=el('button','chan-chip'+(cat===curCat?' on':''),cat);
+    chip.onclick=()=>{ curCat=cat; selId=null; chips.querySelectorAll('.chan-chip').forEach(x=>x.classList.toggle('on',x===chip)); renderMap(); renderList(); };
+    chips.appendChild(chip);
+  });
+  body.appendChild(chips);
+  const grid=el('div','poi-grid');
+  const mapBox=el('div','poi-map'); const listBox=el('div','poi-list');
+  grid.appendChild(mapBox); grid.appendChild(listBox);
+  body.appendChild(grid);
+  function renderMap(){
+    mapBox.innerHTML=venueMapSVG(c,curCat);
+    mapBox.querySelectorAll('.poi-node').forEach(g=>g.onclick=()=>{ selId=g.dataset.id; renderMap(); renderList(); });
+  }
+  function renderList(){
+    listBox.innerHTML='';
+    const list=VENUE_POIS.filter(p=>curCat==='全部'||p.cat===curCat);
+    const sel=VENUE_POIS.find(p=>p.id===selId) || list[0];
+    if(!sel){ listBox.appendChild(el('div','empty-hint','这个分类还没有地点')); return; }
+    const card=el('div','poi-card');
+    card.appendChild(el('div','poi-name',`${sel.emoji} ${sel.name}`));
+    card.appendChild(el('div','poi-meta',`距场馆 ${sel.dist} · 步行 ${sel.walk} · ${sel.price} · ${sel.hours}`));
+    card.appendChild(el('div','poi-why',`✨ 为什么适合你的计划<br>${sel.reason}`));
+    const inPlan = isPoiInPlan(sel.id);
+    if(inPlan){
+      const done=el('button','mini-btn on','✓ 已加入计划');
+      card.appendChild(done);
+      const view=el('button','mini-btn','查看计划');
+      view.onclick=()=>{ state.activeConcert=c; openPlan(c); };
+      card.appendChild(view);
+    } else {
+      const add=el('button','mini-btn primary','＋ 加入我的计划');
+      add.onclick=()=>addPoiToPlan(sel);
+      card.appendChild(add);
+    }
+    listBox.appendChild(card);
+    const others=list.filter(p=>p.id!==sel.id);
+    if(others.length){
+      const sub=el('div','poi-others');
+      others.forEach(p=>{ const r=el('div','poi-other',`${p.emoji} ${p.name} · ${p.dist}`); r.onclick=()=>{ selId=p.id; renderMap(); renderList(); }; sub.appendChild(r); });
+      listBox.appendChild(sub);
+    }
+  }
+  renderMap(); renderList();
+}
+function openVenueDrawer(c){
+  state.activeConcert=c;
+  const ov=el('div','drawer-overlay');
+  const d=el('div','drawer');
+  d.innerHTML=`<div class="drawer-head"><span style="font-size:20px">🗺</span><span>场馆周边 · ${c.venue}</span><button class="drawer-x" id="vdX">✕</button></div>`;
+  const b=el('div','drawer-body');
+  d.appendChild(b); ov.appendChild(d);
+  document.body.appendChild(ov);
+  renderVenueAround(b, c, true);
+  $('#vdX').onclick=()=>ov.remove();
+  ov.onclick=e=>{ if(e.target===ov) ov.remove(); };
+}
+function isPoiInPlan(id){
+  const c=state.activeConcert; if(!c) return false;
+  const w=getWatch(c.id);
+  return w && w.plan && w.plan.pois && w.plan.pois.includes(id);
+}
+function insertPoiIntoJourney(plan, poi){
+  const j=plan.journey;
+  if(poi.cat==='散场夜宵'){
+    const r=plan.returnJourney;
+    const idx=r.findIndex(s=>s.poi==='walk');
+    r.splice(idx+1,0,{t:'22:40',emoji:poi.emoji,title:poi.name,sub:poi.dist+' · '+poi.hours,poi:poi.id});
+    r[r.length-1].t='00:10';
+  } else if(poi.cat==='交通'||poi.cat==='上车点'){
+    const r=plan.returnJourney;
+    const idx=r.findIndex(s=>s.poi==='walk');
+    r.splice(idx,0,{t:'22:25',emoji:poi.emoji,title:poi.name,sub:poi.dist+' · '+poi.hours,poi:poi.id});
+  } else if(poi.cat==='寄存'){
+    const idx=j.findIndex(s=>s.poi==='security');
+    j.splice(idx,0,{t:'17:35',emoji:poi.emoji,title:poi.name,sub:poi.dist+' · '+poi.hours,poi:poi.id});
+  } else if(poi.cat==='吃饭'){
+    const idx=j.findIndex(s=>s.poi==='metro');
+    j.splice(idx+1,0,{t:'16:10',emoji:poi.emoji,title:poi.name,sub:poi.dist+' · '+poi.hours,poi:poi.id});
+  } else {
+    const idx=j.findIndex(s=>s.poi==='entry');
+    j.splice(idx,0,{t:'17:20',emoji:poi.emoji,title:poi.name,sub:poi.dist+' · '+poi.hours,poi:poi.id});
+  }
+}
+function addPoiToPlan(poi){
+  const c=state.activeConcert; if(!c){ toast('先打开一场演出详情'); return; }
+  const w=getWatch(c.id);
+  if(!w || !w.plan){ toast('先加入待看并生成计划，才能把地点插进行程'); return; }
+  if(w.plan.pois && w.plan.pois.includes(poi.id)){ toast('这个地点已经在计划里了'); return; }
+  if(!w.plan.pois) w.plan.pois=[];
+  w.plan.pois.push(poi.id);
+  insertPoiIntoJourney(w.plan, poi);
+  saveState();
+  toast('📍 已加入计划：'+poi.name);
+  closeOverlay();
+  if(state.view==='plan') renderPlan(); else renderMain();
+}
+function removePoiFromPlan(poiId){
+  const c=state.activeConcert; if(!c) return;
+  const w=getWatch(c.id); if(!w||!w.plan) return;
+  w.plan.pois = (w.plan.pois||[]).filter(id=>id!==poiId);
+  w.plan.journey = w.plan.journey.filter(s=>s.poi!==poiId);
+  w.plan.returnJourney = w.plan.returnJourney.filter(s=>s.poi!==poiId);
+  saveState();
+  if(state.view==='plan') renderPlan(); else renderMain();
+  toast('已从计划移除');
+}
+
+/* ================= AI 观演计划页面 ================= */
+function renderPlan(){
+  const ap=activePlan();
+  const v=$('#view'); v.innerHTML='';
+  if(!ap){
+    v.innerHTML=`<div class="quest"><h2>🎒 还没有观演计划</h2><div class="sub">先去「我的主页」把某场演出加入待看，再点「✨ 生成计划」。</div><button class="btn-big" id="goHomeBtn">去我的主页 →</button></div>`;
+    $('#goHomeBtn').onclick=()=>switchView('home');
+    return;
+  }
+  const {c,w,plan}=ap;
+  const days=daysUntil(c.date);
+  const done=plan.tasks.filter(t=>t.done).length;
+  const total=plan.tasks.length;
+  const pct=total?Math.round(done/total*100):0;
+  const stage=state.planStage||'prep';
+  const pills=STATUS.map(s=>`<span class="spill${w.status===s.id?' on':''}" data-s="${s.id}">${s.label}</span>`).join('');
+  const rain = plan.weather.rain>=60;
+  const proactive = rain
+    ? `<div class="proactive">🌧️ 小星发现那天可能会下雨，已经把雨伞加进行前清单了。要不要把出发时间也提前 15 分钟？<button class="mini-btn" id="prYes">好，提前一点</button><button class="mini-btn" id="prNo">先不用</button></div>`
+    : `<div class="proactive">✓ 一切按计划进行，没有新变化。</div>`;
+  const activeStage = stage==='dday'||stage==='return' ? stage : stage;
+  v.innerHTML=`<div class="plan-wrap">
+    <div class="plan-hero card">
+      <div class="ph-top">
+        <div class="ph-left"><div class="ph-title">${c.emoji} ${c.artist} <span class="ph-tour">${c.tour}</span></div><div class="ph-meta">${c.date} · 📍 ${c.venue}</div><div class="ph-meta" style="color:var(--violet);font-size:12px">这是你的计划，每一步你说了算；小星给建议、陪你调。</div></div>
+        <div class="ph-right"><div class="ph-dday">${dLabel(days)}</div><div class="ph-prog"><span>计划完成度 ${done} / ${total}</span><div class="bar"><i style="width:${pct}%"></i></div></div></div>
+      </div>
+      <div class="ph-mid">
+        <span class="ph-status-label">状态</span>
+        <div class="status-pills" id="phPills">${pills}</div>
+        <div class="ph-actions">
+          <button class="mini-btn" id="phDetail">查看演出详情</button>
+          <button class="mini-btn" id="phPoi">🗺 场馆周边</button>
+          <button class="mini-btn primary" id="phAgent">✨ 问问小星</button>
+        </div>
+      </div>
+    </div>
+    ${proactive}
+    <div class="agent-sum">✨ 小星 · 「${plan.summary}」</div>
+    <div class="stage-nav">${PLAN_STAGES.map(s=>`<button class="stage-btn${s.id===activeStage?' on':''}" data-s="${s.id}">${s.emoji} ${s.label}</button>`).join('')}</div>
+    <div class="stage-desc">${stageDesc(stage)}</div>
+    <div class="plan-body" id="planBody"></div>
+  </div>`;
+  $('#phPills').querySelectorAll('.spill').forEach(p=>p.onclick=()=>setStatus(w,p.dataset.s));
+  $('#phDetail').onclick=()=>{ state.activeConcert=c; switchView('detail'); };
+  $('#phPoi').onclick=()=>openVenueDrawer(c);
+  $('#phAgent').onclick=()=>openAgentDrawer(c);
+  if(rain){
+    const pYes=$('#prYes'), pNo=$('#prNo');
+    if(pYes) pYes.onclick=()=>applyDepartEarly();
+    if(pNo) pNo.onclick=()=>ack('好，出发时间先不动。');
+  }
+  v.querySelectorAll('.stage-btn').forEach(b=>b.onclick=()=>{ state.planStage=b.dataset.s; state.planNode=null; state.journeySel=null; renderPlan(); });
+  document.querySelectorAll('.fab').forEach(f=>f.remove());
+  const fab=el('button','fab','✨'); fab.title='问问小星'; fab.onclick=()=>openAgentDrawer(c); document.body.appendChild(fab);
+  renderPlanBody(ap);
+}
+function renderPlanBody(ap){
+  const body=$('#planBody'); if(!body) return;
+  const stage=state.planStage||'prep';
+  if(stage==='dday'){ renderDday(ap); return; }
+  if(stage==='return'){ renderReturn(ap); return; }
+  const tasks = ap.plan.tasks.filter(t=>t.stage===stage);
+  body.className='plan-body cols plan-cols';
+  body.innerHTML=`<div class="card timeline" id="planTimeline"></div><aside class="card context" id="planContext"></aside>`;
+  renderTimeline(ap, tasks);
+  const first = tasks.find(t=>!t.done) || tasks[0];
+  if(first) renderPlanContext(ap, state.planNode || first.key);
+  else { const ctx=$('#planContext'); if(ctx) ctx.appendChild(el('div','empty-hint','这一阶段还没有任务')); }
+}
+function renderTimeline(ap, tasks){
+  const box=$('#planTimeline'); if(!box) return;
+  box.innerHTML='';
+  if(!tasks.length){ box.appendChild(el('div','empty-hint','这一阶段还没有任务')); return; }
+  tasks.forEach((t,i)=>{
+    const node=el('div','tl-node'+(t.done?' done':'')+(state.planNode===t.key?' on':''));
+    node.appendChild(el('div','tl-rail',`<div class="tl-dot">${t.done?'✓':'●'}</div>${i<tasks.length-1?'<div class="tl-line"></div>':''}`));
+    const body=el('div','tl-body');
+    const when = t.done ? '<span class="tl-when" style="background:#e7f7f1;color:var(--mint)">✓ 已完成</span>' : `<span class="tl-when">${t.when}</span>`;
+    body.appendChild(el('div','tl-row',`${when}<span class="tl-title">${t.emoji} ${t.title}</span>`));
+    body.appendChild(el('div','tl-desc',t.desc));
+    node.appendChild(body);
+    node.onclick=()=>{ state.planNode=t.key; renderPlanContext(ap, t.key); box.querySelectorAll('.tl-node').forEach((n,k)=>n.classList.toggle('on', tasks[k].key===t.key)); };
+    box.appendChild(node);
+  });
+}
+function renderPlanContext(ap, key){
+  const box=$('#planContext'); if(!box) return;
+  state.planNode=key;
+  box.innerHTML='';
+  const t=ap.plan.tasks.find(t=>t.key===key);
+  if(!t){ box.appendChild(el('div','empty-hint','点左侧时间线节点查看详情')); return; }
+  const head=el('div','ctx-head');
+  head.appendChild(el('div','',`<div class="ctx-title">${t.emoji} ${t.title}</div><div class="ctx-when">${t.done?'✓ 已完成':t.when}</div>`));
+  if(t.key!=='checklist'){
+    const d=el('button','mini-btn'+(t.done?' on':''), t.done?'✓ 已完成':'标记完成');
+    d.onclick=()=>{ t.done=!t.done; saveState(); state.planNode=null; renderPlan(); };
+    head.appendChild(d);
+  }
+  box.appendChild(head);
+  if(key==='ticket') ctxTicket(ap,box);
+  else if(key==='hotel') ctxHotel(ap,box);
+  else if(key==='transport') ctxTransport(ap,box);
+  else if(key==='weather') ctxWeather(ap,box);
+  else if(key==='checklist') ctxChecklist(ap,box);
+}
+function ctxTicket(ap, box){
+  const {plan}=ap;
+  const b=plan.rec.best, a=plan.rec.alt;
+  box.appendChild(el('div','rec-card',`<div class="lbl">✨ 小星推荐 · 首选</div><div class="name">${b.name}（${b.area}）</div><div class="price">¥${b.price}</div><div class="reason">视野 ${b.view} · 音响 ${b.sound} · 距离 ${b.close}。符合你 ${profile?profile.budget:'不限'} 以内预算，且偏好「${state.prefLabel||profile.pref||'听感好'}」。</div>`));
+  box.appendChild(el('div','rec-card alt',`<div class="lbl">备用</div><div class="name">${a.name}（${a.area}）</div><div class="price">¥${a.price}</div><div class="reason">视野 ${a.view} · 音响 ${a.sound} · 距离 ${a.close}。</div>`));
+  const act=el('div','ctx-actions');
+  act.appendChild(btn('查看抢票方案', ()=>switchView('detail')));
+  act.appendChild(btn('✓ 标记完成', ()=>{ const t=plan.tasks.find(t=>t.key==='ticket'); if(t){t.done=true;} saveState(); state.planNode=null; renderPlan(); }, 'primary'));
+  box.appendChild(act);
+}
+function rebuildHotelJourney(ap){
+  const {plan}=ap;
+  const hotel = plan.hotel, noHotel = plan.noHotel;
+  const j=plan.journey;
+  if(j && j.length){
+    if(noHotel) j[0]={ t:'15:50', emoji:'🏠', title:'从家出发', sub:'打车 / 地铁前往场馆', poi:'home' };
+    else if(hotel) j[0]={ t:j[0].t, emoji:'🏨', title:'从'+hotel.name+'出发', sub:'步行 4 min 到地铁站', poi:'hotel' };
+    else j[0]={ t:j[0].t, emoji:'🏨', title:'从住处出发（住宿待定）', sub:'选定酒店后自动更新出发路线', poi:'hotel' };
+  }
+  const r=plan.returnJourney;
+  if(r && r.length){
+    if(noHotel) r[r.length-1]={ t:'23:10', emoji:'🏠', title:'返回住处', sub:'建议提前订好网约车', poi:'hotel' };
+    else if(hotel) r[r.length-1]={ t:'23:10', emoji:'🏨', title:'返回'+hotel.name, sub:'建议提前订好网约车', poi:'hotel' };
+    else r[r.length-1]={ t:'23:10', emoji:'🏨', title:'返回住处', sub:'建议提前订好网约车', poi:'hotel' };
+  }
+}
+function ctxHotel(ap, box){
+  const {plan}=ap;
+  const hotel = plan.hotel;
+  if(plan.noHotel){
+    box.appendChild(el('div','hotel-ai',`<div class="n">🏠 这次不需要住宿</div><div class="d">已按当天往返安排行程</div><div class="reason">如果临时改变主意，随时可以重新选择住宿，或添加你自己的酒店。</div>`));
+    const act=el('div','ctx-actions');
+    act.appendChild(btn('重新选择住宿', ()=>{ plan.noHotel=false; const t=plan.tasks.find(t=>t.key==='hotel'); if(t) t.done=false; rebuildHotelJourney(ap); saveState(); state.planNode=null; renderPlan(); }, 'primary'));
+    act.appendChild(btn('＋ 添加我的酒店', ()=>openHotelForm(ap)));
+    box.appendChild(act);
+    return;
+  }
+  if(hotel){
+    const src = hotel.source==='user' ? '你添加的' : '✨ 小星推荐';
+    const card=el('div','hotel-ai',`<div class="n">🏨 ${hotel.name} <span class="cnt">${hotel.price}</span></div><div class="d">🏟 ${hotel.walk||'—'}　🚇 ${hotel.transit||'—'}${hotel.note?'　🌙 '+hotel.note:''}${hotel.address?'<br>📍 '+hotel.address:''}${hotel.checkin?'<br>🗓 '+hotel.checkin+' → '+hotel.checkout:''}</div><div class="reason">${src}${hotel.reason?' · '+hotel.reason:''}</div>`);
+    box.appendChild(card);
+    const act=el('div','ctx-actions');
+    act.appendChild(btn('更换', ()=>showHotelPicks(ap, box)));
+    act.appendChild(btn('编辑', ()=>openHotelForm(ap, hotel)));
+    act.appendChild(btn('删除', ()=>{ plan.hotel=null; const t=plan.tasks.find(t=>t.key==='hotel'); if(t) t.done=false; rebuildHotelJourney(ap); saveState(); state.planNode=null; renderPlan(); toast('已删除酒店，住宿恢复待定'); }, 'danger'));
+    box.appendChild(act);
+    return;
+  }
+  box.appendChild(el('div','ctx-sub','🏨 住宿 尚未确定'));
+  const act=el('div','ctx-actions');
+  act.appendChild(btn('✨ 帮我挑几家', ()=>showHotelPicks(ap, box), 'primary'));
+  act.appendChild(btn('＋ 添加我的酒店', ()=>openHotelForm(ap)));
+  act.appendChild(btn('这次不需要住宿', ()=>{ plan.noHotel=true; const t=plan.tasks.find(t=>t.key==='hotel'); if(t) t.done=true; rebuildHotelJourney(ap); saveState(); state.planNode=null; renderPlan(); toast('已按当天往返安排'); }));
+  box.appendChild(act);
+}
+function showHotelPicks(ap, box){
+  box.appendChild(el('div','lbl','✨ 小星挑了几家 · 选一家加入计划'));
+  HOTELS.forEach(h=>{
+    const card=el('div','sel-card');
+    card.appendChild(el('div','n',`🏨 ${h.name} <span class="cnt">${h.price}</span>`));
+    card.appendChild(el('div','d',`🏟 ${h.walk}　🚇 ${h.transit}　🌙 ${h.note}`));
+    card.appendChild(el('div','why',`✨ 为什么推荐它：${h.reason}`));
+    const acts=el('div','acts');
+    const pick=el('button','mini-btn primary','选择这家');
+    pick.onclick=()=>selectHotel(ap, h);
+    acts.appendChild(pick);
+    const more=el('button','mini-btn','查看酒店周边');
+    more.onclick=()=>openHotelAreaModal(h);
+    acts.appendChild(more);
+    card.appendChild(acts);
+    box.appendChild(card);
+  });
+  const selfAdd=el('button','btn-ghost','＋ 自己添加地点');
+  selfAdd.onclick=()=>openHotelForm(ap);
+  box.appendChild(selfAdd);
+}
+function hotelAreaSVG(h){
+  const pois=[
+    { x:310, y:64,  emoji:'🏟', name:'场馆', dist:h.walk },
+    { x:118, y:112, emoji:'🚇', name:'地铁站', dist:'步行 4 min' },
+    { x:478, y:96,  emoji:'🍜', name:'餐厅', dist:'步行 6 min' },
+    { x:150, y:232, emoji:'🏪', name:'便利店', dist:'步行 3 min' },
+    { x:474, y:232, emoji:'☕', name:'奶茶/咖啡', dist:'步行 5 min' },
+  ];
+  let s='<svg viewBox="0 0 620 300" class="rmap">';
+  s+='<rect width="620" height="300" fill="#fffdf8"/>';
+  s+='<circle cx="310" cy="150" r="24" fill="#ffeaf1" stroke="#ff6b9d" stroke-width="2"/><text x="310" y="157" text-anchor="middle" font-size="20">🏨</text>';
+  s+='<text x="310" y="182" text-anchor="middle" font-size="11" font-weight="700" fill="#5a4a6a">'+h.name+'</text>';
+  pois.forEach(p=>{
+    s+=`<line x1="310" y1="150" x2="${p.x}" y2="${p.y}" stroke="#f6d9e4" stroke-width="1.5" stroke-dasharray="4 4"/>`;
+    s+=`<g><circle cx="${p.x}" cy="${p.y}" r="15" fill="#fff" stroke="#f0c3d4" stroke-width="2"/><text x="${p.x}" y="${p.y+5}" text-anchor="middle" font-size="13">${p.emoji}</text><text x="${p.x}" y="${p.y-18}" text-anchor="middle" font-size="9" font-weight="700" fill="#7a6f8a">${p.name}</text><text x="${p.x}" y="${p.y+30}" text-anchor="middle" font-size="9" fill="#b9aec4">${p.dist}</text></g>`;
+  });
+  s+='</svg>';
+  return s;
+}
+function openHotelAreaModal(h){
+  closeOverlay();
+  const m=el('div','overlay');
+  const box=el('div','modal');
+  box.innerHTML = `<h3>🏨 ${h.name} · 酒店周边</h3>
+    <div class="msub">${h.transit} · ${h.note||''}</div>
+    ${hotelAreaSVG(h)}
+    <div class="demo-note">Demo · 示意地图（非真实地图）· 点空白处关闭</div>`;
+  m.appendChild(box); document.body.appendChild(m);
+  m.onclick=e=>{ if(e.target===m) closeOverlay(); };
+}
+function selectHotel(ap, h){
+  ap.plan.hotel = Object.assign({}, h, { source:'ai' });
+  ap.plan.noHotel = false;
+  const t=ap.plan.tasks.find(t=>t.key==='hotel'); if(t) t.done=true;
+  rebuildHotelJourney(ap);
+  saveState(); state.planNode=null; renderPlan();
+  toast('✓ 已加入你的观演计划 · '+h.name);
+}
+function openHotelForm(ap, hotel){
+  closeOverlay();
+  const editing = !!hotel;
+  const m=el('div','overlay');
+  const box=el('div','modal');
+  box.innerHTML=`<h3>${editing?'✏️ 编辑酒店':'🏨 添加我的酒店'}</h3><div class="msub">${editing?'改好后点保存，计划会同步更新。':'填好酒店信息，就把它加进你的观演计划。'}</div>`;
+  const g=el('div','');
+  g.innerHTML = `<div class="field"><label>酒店名称</label><input value="${editing?hotel.name||'':''}" placeholder="如 星海精选酒店"></div>`
+    + `<div class="field"><label>地址 *</label><input value="${editing?hotel.address||'':''}" placeholder="如 浦东新区耀体路…"></div>`
+    + `<div class="form-row">`
+    + `<div class="field"><label>入住日期</label><input value="${editing?hotel.checkin||'':''}" placeholder="如 2026.10.02"></div>`
+    + `<div class="field"><label>退房日期</label><input value="${editing?hotel.checkout||'':''}" placeholder="如 2026.10.04"></div>`
+    + `</div>`
+    + `<div class="field"><label>备注</label><input value="${editing?hotel.note||'':''}" placeholder="如 已含早餐、近地铁口"></div>`;
+  box.appendChild(g);
+  const cta=el('div','modal-cta');
+  const submit=el('button','btn-big', editing?'保存修改':'加入我的计划');
+  submit.onclick=()=>{
+    const inputs=g.querySelectorAll('input');
+    const name=inputs[0].value.trim();
+    const address=inputs[1].value.trim();
+    const checkin=inputs[2].value.trim();
+    const checkout=inputs[3].value.trim();
+    const note=inputs[4].value.trim();
+    if(!name || !address){ toast('请至少填写酒店名称和地址'); return; }
+    const obj = { id:'user'+Date.now(), name, price:'自定义', walk:'—', transit:'—', note:note||null, reason:null, address, checkin, checkout, source:'user' };
+    ap.plan.hotel = obj; ap.plan.noHotel=false;
+    const t=ap.plan.tasks.find(t=>t.key==='hotel'); if(t) t.done=true;
+    rebuildHotelJourney(ap);
+    saveState(); closeOverlay(); state.planNode=null; renderPlan();
+    toast('✓ 已加入你的观演计划');
+  };
+  cta.appendChild(submit);
+  const cancel=el('button','btn-ghost','取消'); cancel.onclick=()=>closeOverlay();
+  cta.appendChild(cancel);
+  box.appendChild(cta);
+  m.appendChild(box); document.body.appendChild(m);
+  m.onclick=e=>{ if(e.target===m) closeOverlay(); };
+}
+function transportRecs(c){
+  const home = profile ? profile.home : null;
+  if(!home) return [];
+  if(home===c.city){
+    return [ { mode:'🚇 地铁 / 打车', code:'同城', from:home, to:c.city, departTime:'17:00', arriveTime:'17:40', cost:'¥10-50', why:'同城去看，散场人多建议提前叫车或走一站再打车。' } ];
+  }
+  return [
+    { mode:'🚄 高铁', code:'G1974', from:home, to:c.city, departTime:'09:00', arriveTime:'17:30', cost:'¥568', why:'到站时间早，留足吃饭休息，性价比最高。' },
+    { mode:'✈️ 飞机', code:'MU5441', from:home, to:c.city, departTime:'13:00', arriveTime:'16:00', cost:'¥980', why:'更快，适合当天上午还有安排、时间紧的情况。' },
+  ];
+}
+function ctxTransport(ap, box){
+  const {plan,c}=ap;
+  const transport = plan.transport;
+  if(transport){
+    box.appendChild(el('div','sel-card sel',`
+      <div class="n">${transport.mode} ${transport.code||''} <span class="cnt">${transport.cost||''}</span></div>
+      <div class="d">${transport.from} → ${transport.to} · ${transport.departTime||'—'} → ${transport.arriveTime||'—'}${transport.note?'<br>'+transport.note:''}</div>
+      <div class="why">${transport.source==='user'?'你添加的行程。':'✨ 为什么推荐它：'+(transport.why||transport.tip||'')}</div>`));
+    const act=el('div','ctx-actions');
+    act.appendChild(btn('更换', ()=>showTransportPicks(ap, box)));
+    act.appendChild(btn('编辑', ()=>openTransportForm(ap, transport)));
+    act.appendChild(btn('删除', ()=>{ plan.transport=null; const t=plan.tasks.find(t=>t.key==='transport'); if(t) t.done=false; saveState(); state.planNode=null; renderPlan(); toast('已删除交通行程'); }, 'danger'));
+    box.appendChild(act);
+    return;
+  }
+  box.appendChild(el('div','ctx-sub','🚄 城际交通 尚未确定'));
+  box.appendChild(el('div','view-caption', `从 <b>${profile?profile.home:'所在地'}</b> → <b>${c.city}</b> 去看 ${c.artist}。`));
+  const act=el('div','ctx-actions');
+  act.appendChild(btn('✨ 帮我规划', ()=>showTransportPicks(ap, box), 'primary'));
+  act.appendChild(btn('＋ 添加我的行程', ()=>openTransportForm(ap)));
+  box.appendChild(act);
+}
+function showTransportPicks(ap, box){
+  box.appendChild(el('div','lbl','✨ 小星帮你规划了两个方案'));
+  transportRecs(ap.c).forEach(t=>{
+    const card=el('div','sel-card');
+    card.appendChild(el('div','n',`${t.mode} ${t.code||''} <span class="cnt">${t.cost||''}</span>`));
+    card.appendChild(el('div','d',`${t.from} → ${t.to} · ${t.departTime} → ${t.arriveTime}`));
+    card.appendChild(el('div','why',`✨ 为什么推荐它：${t.why||t.tip||''}`));
+    const acts=el('div','acts');
+    const pick=el('button','mini-btn primary','选择此方案');
+    pick.onclick=()=>selectTransport(ap, t);
+    acts.appendChild(pick);
+    card.appendChild(acts);
+    box.appendChild(card);
+  });
+  const selfAdd=el('button','btn-ghost','＋ 自己添加行程');
+  selfAdd.onclick=()=>openTransportForm(ap);
+  box.appendChild(selfAdd);
+}
+function selectTransport(ap, t){
+  ap.plan.transport = Object.assign({}, t, { source:'ai' });
+  const tk=ap.plan.tasks.find(t=>t.key==='transport'); if(tk) tk.done=true;
+  saveState(); state.planNode=null; renderPlan();
+  toast('✓ 城际交通已确定 · '+t.mode);
+}
+function openTransportForm(ap, transport){
+  closeOverlay();
+  const editing=!!transport;
+  const m=el('div','overlay');
+  const box=el('div','modal');
+  const modes=['高铁','飞机','大巴','自驾','其他'];
+  const modeVal = editing ? ((transport.mode||'').match(/(高铁|飞机|大巴|自驾|其他)/)||[])[1] || '其他' : '高铁';
+  box.innerHTML=`<h3>${editing?'✏️ 编辑行程':'🚄 添加我的行程'}</h3><div class="msub">${editing?'改好后点保存，计划会同步更新。':'填好行程，就把它加进你的观演计划。'}</div>`;
+  const g=el('div','');
+  g.innerHTML = `<div class="field"><label>交通方式</label><select>${modes.map(m=>`<option${m===modeVal?' selected':''}>${m}</option>`).join('')}</select></div>`
+    + `<div class="form-row"><div class="field"><label>班次</label><input value="${editing?transport.code||'':''}" placeholder="如 G1974"></div><div class="field"><label>出发地</label><input value="${editing?transport.from||'':''}" placeholder="如 重庆"></div></div>`
+    + `<div class="form-row"><div class="field"><label>到达地</label><input value="${editing?transport.to||'':''}" placeholder="${ap.c.city}"></div><div class="field"><label>出发日期</label><input value="${editing?transport.date||'':''}" placeholder="如 2026.10.03"></div></div>`
+    + `<div class="form-row"><div class="field"><label>出发时间</label><input value="${editing?transport.departTime||'':''}" placeholder="如 09:00"></div><div class="field"><label>到达时间</label><input value="${editing?transport.arriveTime||'':''}" placeholder="如 17:30"></div></div>`
+    + `<div class="field"><label>备注</label><input value="${editing?transport.note||'':''}" placeholder="如 靠窗 / 已取票"></div>`;
+  box.appendChild(g);
+  const cta=el('div','modal-cta');
+  const submit=el('button','btn-big', editing?'保存修改':'加入我的计划');
+  submit.onclick=()=>{
+    const inputs=g.querySelectorAll('input');
+    const mode = g.querySelector('select').value;
+    const code=inputs[0].value.trim();
+    const from=inputs[1].value.trim();
+    const to=inputs[2].value.trim();
+    const date=inputs[3].value.trim();
+    const departTime=inputs[4].value.trim();
+    const arriveTime=inputs[5].value.trim();
+    const note=inputs[6].value.trim();
+    if(!from || !to){ toast('请至少填写出发地和到达地'); return; }
+    const modeEmoji = mode==='高铁'?'🚄':mode==='飞机'?'✈️':mode==='大巴'?'🚌':mode==='自驾'?'🚗':'🚗';
+    const obj = { mode:modeEmoji+' '+mode, code:code||null, from, to, date, departTime, arriveTime, note:note||null, cost:'自定义', source:'user' };
+    ap.plan.transport=obj;
+    const tk=ap.plan.tasks.find(t=>t.key==='transport'); if(tk) tk.done=true;
+    saveState(); closeOverlay(); state.planNode=null; renderPlan();
+    toast('✓ 城际交通已确定');
+  };
+  cta.appendChild(submit);
+  const cancel=el('button','btn-ghost','取消'); cancel.onclick=()=>closeOverlay();
+  cta.appendChild(cancel);
+  box.appendChild(cta);
+  m.appendChild(box); document.body.appendChild(m);
+  m.onclick=e=>{ if(e.target===m) closeOverlay(); };
+}
+function ctxWeather(ap, box){
+  const wx=ap.plan.weather;
+  box.appendChild(el('div','weather-card',`<div class="w-top"><span class="w-emoji">🌧</span><div><div class="w-temp">${wx.temp}</div><div class="w-cond">${wx.cond} · 降雨概率 ${wx.rain}% · 晚间体感 ${wx.night}</div></div></div><div class="w-outfit">👕 ${wx.outfit}　☔ ${wx.tips[0]}　👟 ${wx.tips[1]}</div>`));
+  box.appendChild(el('div','lbl','计划已根据天气调整'));
+  wx.adjustments.forEach(a=>{ box.appendChild(el('div','adjust-line','✓ '+a.txt)); });
+  box.appendChild(el('div','demo-note','Demo · 模拟天气数据 · 演出前 3 天自动更新'));
+}
+function ctxChecklist(ap, box){
+  const {w}=ap;
+  const pack=ensurePack(w);
+  box.appendChild(el('div','ctx-sub',`${pack.filter(p=>p.done).length} / ${pack.length} 已完成`));
+  const list=el('div','checklist');
+  pack.forEach(p=>{
+    const row=el('div','check'+(p.done?' done':''), `<input type="checkbox"${p.done?' checked':''}><div class="ct">${p.txt}</div>`);
+    row.onclick=()=>{ p.done=!p.done; saveState(); const cb=row.querySelector('input'); cb.checked=p.done; row.classList.toggle('done',p.done); };
+    list.appendChild(row);
+  });
+  box.appendChild(list);
+  const add=el('div','add-item');
+  const inp=el('input'); inp.placeholder='＋ 添加自己的物品（如 隐形眼镜、相机电池）';
+  const b=el('button','','＋');
+  const doAdd=()=>{ const t=inp.value.trim(); if(!t) return; inp.value=''; const warn=PACK_WARN_RE.test(t); pack.push({txt:t, done:false, custom:true, warn}); saveState(); renderPlanContext(ap,'checklist'); if(warn) toast('⚠️ 该物品可能违反场馆规则'); };
+  b.onclick=doAdd; inp.onkeydown=e=>{ if(e.key==='Enter') doAdd(); };
+  add.appendChild(inp); add.appendChild(b);
+  box.appendChild(add);
+  pack.filter(p=>p.custom&&p.warn).forEach(p=>{
+    box.appendChild(el('div','risk-note',`⚠️ 根据本场馆规则，「${p.txt}」可能禁止携带。 [查看场馆规则]`));
+  });
+}
+
+/* ================= D-Day 页面 ================= */
+function renderDday(ap){
+  const body=$('#planBody'); if(!body) return;
+  const {w,plan}=ap; const wx=plan.weather; const pack=ensurePack(w);
+  const packDone=pack.filter(p=>p.done).length;
+  body.className='plan-body dday';
+  body.innerHTML=`<div class="dday-top">
+      <div class="card dday-weather"><div class="w-emoji">🌧</div><div><b>${wx.temp}</b> · ${wx.cond}<div class="s">👕 ${wx.outfit} · ☔ ${wx.tips[0]}</div></div></div>
+      <div class="card"><div class="big">19:30</div><div class="s">开演 · 建议 18:30 入场 · 15:40 出发</div></div>
+      <div class="card">🎒 行前检查<div class="s"><b>${packDone} / ${pack.length}</b> 完成</div></div>
+    </div>
+    <div class="dday-cols">
+      <div class="card journey" id="journeyBox"></div>
+      <div class="card map" id="mapBox"></div>
+    </div>`;
+  renderJourney(ap);
+  renderRouteMap(ap);
+}
+function renderJourney(ap){
+  const box=$('#journeyBox'); if(!box) return;
+  box.innerHTML='';
+  const steps=ap.plan.journey;
+  steps.forEach((s,i)=>{
+    const isPoi = ap.plan.pois && ap.plan.pois.includes(s.poi);
+    const row=el('div','j-step'+(state.journeySel===s.poi?' on':''));
+    row.appendChild(el('div','j-time',s.t));
+    row.appendChild(el('div','j-main',`<span class="j-emoji">${s.emoji}</span><span class="j-title">${s.title}</span>${s.sub?`<div class="j-sub">${s.sub}</div>`:''}`));
+    if(isPoi){
+      const x=el('button','trip-x','✕'); x.title='移除'; x.style.cssText='margin-left:auto;align-self:center;';
+      x.onclick=e=>{ e.stopPropagation(); removePoiFromPlan(s.poi); };
+      row.appendChild(x);
+    } else if(i<steps.length-1){
+      row.appendChild(el('div','j-down','↓'));
+    }
+    row.onclick=()=>{ state.journeySel=s.poi; renderDday(ap); };
+    box.appendChild(row);
+  });
+}
+function renderRouteMap(ap){
+  const box=$('#mapBox'); if(!box) return;
+  box.innerHTML='';
+  const selected = state.journeySel || 'venue';
+  const seq=['hotel','metro','noodle','photo','venue','exit','ride'];
+  const pts=seq.map(k=>MAP_POS[k]);
+  let s='<svg viewBox="0 0 620 380" class="rmap">';
+  s+='<rect width="620" height="380" fill="#fffdf8"/>';
+  s+=`<polyline points="${pts.map(p=>p[0]+','+p[1]).join(' ')}" fill="none" stroke="#a06bff" stroke-width="3" stroke-dasharray="7 7" stroke-linecap="round" opacity="0.45"/>`;
+  seq.forEach(k=>{
+    const xy=MAP_POS[k]; const n=MAP_NODE_LABEL[k]||{emoji:'📍',name:k};
+    const sel=k===selected;
+    s+=`<g class="rmap-node" data-k="${k}" style="cursor:pointer">
+      <circle cx="${xy[0]}" cy="${xy[1]}" r="${sel?17:13}" fill="${sel?'#a06bff':'#fff'}" stroke="${sel?'#a06bff':'#d9c9ec'}" stroke-width="2"/>
+      <text x="${xy[0]}" y="${xy[1]+5}" text-anchor="middle" font-size="14">${n.emoji}</text>
+      <text x="${xy[0]}" y="${xy[1]-18}" text-anchor="middle" font-size="10" font-weight="700" fill="#5a4a6a">${n.name}</text>
+    </g>`;
+  });
+  s+='<text x="310" y="370" text-anchor="middle" font-size="10" fill="#b9aec4">Demo · 示意路线图（非真实地图）</text>';
+  s+='</svg>';
+  box.innerHTML=s;
+  box.querySelectorAll('.rmap-node').forEach(g=>{
+    g.onclick=()=>{ state.journeySel=g.dataset.k; renderDday(ap); };
+  });
+}
+function renderReturn(ap){
+  const body=$('#planBody'); if(!body) return;
+  const {plan}=ap;
+  body.className='plan-body dday';
+  body.innerHTML=`<div class="dday-cols" style="grid-template-columns:1fr 1fr">
+    <div class="card journey" id="returnBox"></div>
+    <div class="card map" id="returnNotes"></div>
+  </div>`;
+  const rb=$('#returnBox');
+  const steps=plan.returnJourney || [];
+  steps.forEach((s,i)=>{
+    const row=el('div','j-step');
+    row.appendChild(el('div','j-time',s.t));
+    row.appendChild(el('div','j-main',`<span class="j-emoji">${s.emoji}</span><span class="j-title">${s.title}</span>${s.sub?`<div class="j-sub">${s.sub}</div>`:''}`));
+    if(i<steps.length-1) row.appendChild(el('div','j-down','↓'));
+    rb.appendChild(row);
+  });
+  const rn=$('#returnNotes');
+  rn.appendChild(el('div','ctx-sub','散场返程 · 小星帮你留意这些'));
+  rn.appendChild(el('div','sec-item ok','<span class="em">🚪</span><div>散场后 30 分钟内地铁最拥挤，步行到下一站再进站更快。</div>'));
+  rn.appendChild(el('div','sec-item ok','<span class="em">🚕</span><div>提前 15 分钟叫网约车，别堵在场馆门口等。</div>'));
+  rn.appendChild(el('div','sec-item ok','<span class="em">🍜</span><div>想吃夜宵先看好营业时间，川味火锅营业至 02:00。</div>'));
+  if(plan.transport){
+    const em = (plan.transport.mode||'').split(' ')[0];
+    rn.appendChild(el('div','sec-item ok',`<span class="em">${em}</span><div>返程：${plan.transport.mode} ${plan.transport.code||''} · ${plan.transport.departTime||''}（已加入计划）</div>`));
+  }
+}
+
+/* ================= 聊天（小星） ================= */
+function currentPersona(){ return { name:'小星', emoji:'✨', type:'agent' }; }
+function updateChatTitle(){
+  const t=$('#chatTitle');
+  if(t) t.textContent = '和小星聊聊 · 想去见谁，告诉 ta 就好';
+}
+function renderChatSide(){
+  const box=$('#chatSide'); if(!box) return;
+  box.innerHTML='';
+  const p=currentPersona();
+  box.appendChild(el('div','pf-head',`<div class="avatar" style="font-size:28px">${p.emoji}</div><div><div class="t">✨ ${p.name}</div><div class="s">你的 AI 观演搭子</div></div>`));
+  box.appendChild(el('div','pf-foot','从想去，到现场，再到平安回家。我可以陪你找演出、选座位、做攻略、安排行程，计划有变化，也可以随时告诉我。'));
+  box.appendChild(el('div','demo-note','💡 本 Demo 为内置交互问答，未接入真实 AI / API'));
+}
+function msgEl(log){
+  if(log.who==='user'){
+    const d=el('div','msg user',`<div class="ava">🙋‍♀️</div><div class="bubble"></div>`);
+    d.querySelector('.bubble').textContent=log.html;
+    return d;
+  }
+  return el('div','msg bot',`<div class="ava">${log.ava}</div><div class="bubble">${log.html}</div>`);
+}
+function pushBot(html){
+  const p=currentPersona();
+  chatLog.push({who:'bot', ava:p.emoji, html});
+  const m=$('#msgs'); if(m){ m.appendChild(msgEl(chatLog[chatLog.length-1])); scrollChat(); }
+}
+function pushUser(txt){
+  chatLog.push({who:'user', html:txt});
+  const m=$('#msgs'); if(m){ m.appendChild(msgEl(chatLog[chatLog.length-1])); scrollChat(); }
+}
+let chatUI = { chips: null, action: null, actions: null };
+function renderTail(){
+  const cb=$('#chips'), ab=$('#actionBar');
+  if(cb) cb.innerHTML='';
+  if(ab) ab.innerHTML='';
+  if(chatUI.chips && cb){
+    chatUI.chips.forEach((o,i)=>{
+      const ch=el('button','chip',o.label); ch.style.animationDelay=(i*0.06)+'s';
+      ch.onclick=()=>o.cb(o.label);
+      cb.appendChild(ch);
+    });
+  }
+  if(chatUI.actions && ab){
+    const row=el('div','action-row');
+    chatUI.actions.forEach(a=>{
+      const b=el('button', a.primary?'btn-big':'btn-big ghost', a.label); b.onclick=a.cb; row.appendChild(b);
+    });
+    ab.appendChild(row);
+  } else if(chatUI.action && ab){
+    const b=el('button','btn-big',chatUI.action.label); b.onclick=chatUI.action.cb;
+    ab.appendChild(b);
+  }
+}
+const QUICK_OPTS = ['看看推荐','帮我选个座','查查酒店','问问安检','和小星一起调整'];
+function defaultChips(){ return QUICK_OPTS.map(o=>({label:o, cb:onChatChip})); }
+function showChips(opts, cb){ chatUI.chips = opts.map(o=>({label:o, cb})); chatUI.action=null; chatUI.actions=null; renderTail(); }
+function showAction(label, cb){ chatUI.chips = defaultChips(); chatUI.action={label, cb}; chatUI.actions=null; renderTail(); }
+function showActions(actions){ chatUI.chips = defaultChips(); chatUI.action=null; chatUI.actions=actions; renderTail(); }
+function showActionPlusChips(actionLabel, actionCb, chipOpts, chipCb){
+  chatUI.action = {label:actionLabel, cb:actionCb};
+  chatUI.chips = chipOpts.map(o=>({label:o, cb:chipCb}));
+  chatUI.actions = null;
+  renderTail();
+}
+let recIndex = 0;
+function nextConcert(){
+  const cur = state.activeConcert;
+  const others = CONCERTS.filter(c=>!cur || c.id!==cur.id);
+  const c = others[recIndex % others.length];
+  recIndex++;
+  return c || CONCERTS[0];
+}
+
+function renderChat(){
+  const v=$('#view'); v.innerHTML='';
+  v.innerHTML = `<div class="cols chat-cols">
+    <aside class="card chat-side" id="chatSide"></aside>
+    <section class="card chat">
+      <div class="chat-title"><span class="dot"></span> <span id="chatTitle"></span></div>
+      <div class="msgs" id="msgs"></div>
+      <div id="chips"></div>
+      <div class="action-bar" id="actionBar"></div>
+      <div class="input-bar">
+        <input type="text" id="chatInput" placeholder="想看谁、有什么需求，打字告诉我～">
+        <button id="sendBtn">➤</button>
+      </div>
+    </section>
+  </div>`;
+  renderChatSide(); updateChatTitle();
+  const m=$('#msgs');
+  chatLog.forEach(log=>m.appendChild(msgEl(log)));
+  scrollChat();
+  if(chatLog.length===0){ openChat(); }
+  else { renderTail(); }
+  bindInput();
+}
+
+function openChat(){
+  if(!profileDone()){
+    pushBot('嗨～我还不太认识你。先去「我的主页」填一下追星档案，我才能帮你盯演出、生成观演计划哦 🎀');
+    showAction('去建档 →', ()=>switchView('home'));
+    return;
+  }
+  pushBot('嗨，我是小星 ✨ 想去见谁？告诉我就好。选票、住宿、交通，到演出当天怎么走，我们可以一起慢慢安排。');
+  showChatChips();
+}
+function showChatChips(){
+  showChips(QUICK_OPTS, onChatChip);
+}
+function askHotelPath(){
+  pushBot('你是想先了解场馆周边的住宿攻略，还是想直接定下住哪家、加进观演计划？👇');
+  showActions([
+    { label:'📖 了解住宿攻略', cb:()=>openDetail('host','hotel') },
+    { label:'🏨 定住宿 · 加进计划', cb:gotoHotelPlan, primary:true },
+  ]);
+}
+function gotoHotelPlan(){
+  const ap = activePlan();
+  if(ap){ openPlanStage('prep2','hotel'); }
+  else { pushBot('要先把一场演出加入待看、生成观演计划，我才能帮你安排住宿哦～👇'); showAction('去我的主页 →', ()=>switchView('home')); }
+}
+function onChatChip(v){
+  pushUser(v);
+  if(v==='帮我选个座'){ pushBot('好呀，走，我帮你挑个最合适的座位 👇'); showAction('去选座 →', ()=>switchView('detail')); }
+  else if(v==='看看推荐'){ pushBot('当然～我挑了几场最近值得去现场看的 👇'); showActionPlusChips('打开推荐 →', ()=>switchView('home'), ['还有其他想看的吗'], onChatChip); }
+  else if(v==='还有其他想看的吗'){ const nc=nextConcert(); state.activeConcert=nc; pushBot(`还有 <b>${nc.artist}</b>「${nc.tour}」在 ${nc.city} · ${nc.date}，要看这场吗 👇`); showActionPlusChips('去选座 →', ()=>switchView('detail'), ['还有其他想看的吗'], onChatChip); }
+  else if(v==='查查酒店'){ askHotelPath(); }
+  else if(v==='问问安检'){ pushBot('安检这里有几样东西要注意 👇 大型灯牌和自拍杆别带哦。'); showAction('去详情看 →', ()=>openDetail('host','security')); }
+  else if(v==='和小星一起调整'){ const ap=activePlan(); if(ap){ pushBot('想怎么调整直接告诉我就好～ 比如：「我已经订好酒店了」「我想晚一点出发」「帮我换个便宜一点的酒店」「散场后想吃火锅」「我当天坐高铁回去」「这次不用住酒店」。'); showAction('打开计划 →', ()=>{ switchView('plan'); }); } else { pushBot('现在还没有观演计划。先把一场演出加入待看、生成计划，就能一起调整啦 👇'); showAction('去我的主页 →', ()=>switchView('home')); } }
+}
+function bindInput(){
+  const inp=$('#chatInput'), b=$('#sendBtn');
+  if(!inp || !b) return;
+  const send=()=>{ const t=inp.value.trim(); if(!t) return; inp.value=''; sendMsg(t); };
+  b.onclick=send;
+  inp.onkeydown=e=>{ if(e.key==='Enter') send(); };
+}
+function sendMsg(t){ pushUser(t); reply(t); }
+
+/* ================= 计划 intent（Chat ↔ Plan 联动） ================= */
+function ack(html){ closeOverlay(); pushBot(html); showChatChips(); }
+function applyGotTicket(tierName){
+  const ap=activePlan(); if(!ap) return;
+  ap.w.status='ticketed';
+  ap.w.tier = tierName || ap.plan.rec.best.name;
+  const t=ap.plan.tasks.find(t=>t.key==='ticket'); if(t) t.done=true;
+  saveState(); closeOverlay(); switchView('plan');
+  toast('🎫 已经有票啦！抢票任务我帮你收起来了，之前安排好的住宿、交通和行程都还在。');
+}
+function applyNoHotel(){
+  const ap=activePlan(); if(!ap) return;
+  ap.plan.noHotel=true; ap.plan.hotel=null;
+  const t=ap.plan.tasks.find(t=>t.key==='hotel'); if(t) t.done=true;
+  rebuildHotelJourney(ap);
+  saveState(); closeOverlay(); switchView('plan');
+  toast('✅ 已改为当天往返');
+}
+function applyDinner(){
+  const ap=activePlan(); if(!ap) return;
+  const poi=VENUE_POIS.find(p=>p.id==='hotpot');
+  if(poi){ if(!ap.plan.pois) ap.plan.pois=[]; if(!ap.plan.pois.includes(poi.id)){ ap.plan.pois.push(poi.id); insertPoiIntoJourney(ap.plan, poi); } }
+  saveState(); closeOverlay(); switchView('plan');
+  toast('🍲 火锅已加入计划，返程时间同步延后');
+}
+function applyLateDeparture(){
+  const ap=activePlan(); if(!ap) return;
+  ap.plan.journey = ap.plan.journey.map((s,i)=> i===0 ? Object.assign({},s,{t:'16:20',sub:(ap.plan.hotel?'步行 4 min 到地铁站（已延后）':'已延后出发')}) : s);
+  saveState(); closeOverlay(); switchView('plan');
+  toast('✅ 计划已更新：出发时间延后到 16:20');
+}
+function applyDepartEarly(){
+  const ap=activePlan(); if(!ap) return;
+  ap.plan.journey = ap.plan.journey.map((s,i)=> i===0 ? Object.assign({},s,{t:'15:25', sub:(ap.plan.hotel?'步行 4 min 到地铁站（已提前）':'提前出发')}) : s);
+  saveState(); if(state.view==='plan') renderPlan(); else renderMain();
+  toast('✅ 出发时间提前了 15 分钟');
+}
+function applyChangeHotel(){
+  const ap=activePlan(); if(!ap) return;
+  const nh = HOTELS.find(h=>h.id==='h2');
+  ap.plan.hotel = Object.assign({}, nh, { source:'ai' }); ap.plan.noHotel=false;
+  const t=ap.plan.tasks.find(t=>t.key==='hotel'); if(t) t.done=true;
+  rebuildHotelJourney(ap);
+  saveState(); closeOverlay(); switchView('plan');
+  toast('✅ 酒店已更换为 '+nh.name);
+}
+function applyHotelDone(){
+  const ap=activePlan(); if(!ap) return;
+  const t=ap.plan.tasks.find(t=>t.key==='hotel'); if(t) t.done=true;
+  saveState(); closeOverlay(); switchView('plan');
+  toast('✅ 住宿已标记完成');
+}
+function applyTransport(){
+  const ap=activePlan(); if(!ap) return;
+  const rec=transportRecs(ap.c).find(t=>/高铁/.test(t.mode)) || transportRecs(ap.c)[0];
+  if(!rec){ closeOverlay(); switchView('plan'); return; }
+  ap.plan.transport = Object.assign({}, rec, { source:'ai', note:'当天往返' });
+  const t=ap.plan.tasks.find(t=>t.key==='transport'); if(t) t.done=true;
+  saveState(); closeOverlay(); switchView('plan');
+  toast('✅ 已按当天高铁往返安排');
+}
+function planIntent(t){
+  const ap=activePlan();
+  if(!ap) return null;
+  if(/(抢到|买到|已经有票|有票|出票|880|票了)/.test(t)){
+    return { html:'收到～ 我把状态更新为「已经有票」，抢票任务收起来，之前安排好的住宿、交通、天气、Checklist 和当天路线都还在。', actions:[{label:'确认更新',cb:()=>applyGotTicket(),primary:true},{label:'先不改',cb:()=>ack('好，先保持原状态。')}] };
+  }
+  if(/(不住酒店|不住宿|当天回|当天往返|不想住|这次不用住)/.test(t)){
+    return { html:'好，改为当天往返：住宿任务标为完成、出发路线改成从家出发、散场后直接返程。', actions:[{label:'应用新计划',cb:applyNoHotel,primary:true},{label:'保持原计划',cb:()=>ack('好，住宿方案先保留。')}] };
+  }
+  if(/(换个|换一家|换.*酒店|酒店.*换|便宜.*酒店|更便宜)/.test(t)){
+    const old=(ap.plan.hotel&&ap.plan.hotel.name)||'星海精选酒店';
+    const nh=HOTELS.find(h=>h.id==='h2');
+    return { html:`✨ 我可以这样帮你调整：<br>住宿：<b>${old}</b> → <b>${nh.name}</b><br>预计省 <b>¥240</b>，但去场馆会多 <b>6 min</b>。`, actions:[{label:'就这样调整',cb:applyChangeHotel,primary:true},{label:'先不改',cb:()=>ack('好，先不换。')}] };
+  }
+  if(/(订好.*酒店|订了.*酒店|已经订.*酒店|酒店.*订好|订了酒店)/.test(t)){
+    return { html:'好嘞～ 住宿我帮你标为已完成。如果想记录是哪家，可以去「行前准备 → 住宿」里添加。', actions:[{label:'标记完成',cb:applyHotelDone,primary:true},{label:'先不用',cb:()=>ack('好。')}] };
+  }
+  if(/(坐高铁|高铁回去|高铁.*回|坐火车|火车|坐飞机|飞机回去|飞机.*回|自驾)/.test(t)){
+    const rec=transportRecs(ap.c).find(x=>/高铁/.test(x.mode))||transportRecs(ap.c)[0];
+    if(!rec) return null;
+    return { html:`收到～ 我帮你把城际交通定为：<b>${rec.mode} ${rec.code||''}</b>（${rec.from} → ${rec.to} · ${rec.departTime} 出发）。`, actions:[{label:'确认加入计划',cb:applyTransport,primary:true},{label:'先不改',cb:()=>ack('好。')}] };
+  }
+  if(/(火锅|夜宵|演出结束.*吃|想吃|吃啥|晚饭|餐厅|吃个)/.test(t)){
+    return { html:'找到两家营业较晚、在返程路线附近的餐厅：<br>① 川味火锅 · 距返程站 300m · 营业至 02:00<br>② 烧烤小馆 · 步行 8 min · 营业至 01:30', actions:[{label:'＋ 加入火锅',cb:applyDinner,primary:true},{label:'先不加',cb:()=>ack('好，先不加餐。')}] };
+  }
+  if(/(晚点|太早|早点|不想.*早|下午三点|15:3|三点|晚出发)/.test(t)){
+    return { html:'可以。如果取消周边排队，你最晚 <b>16:20</b> 从酒店出发，预计 <b>18:05</b> 到达安检口，仍保留约 55 分钟缓冲。', actions:[{label:'更新计划',cb:applyLateDeparture,primary:true},{label:'保持原计划',cb:()=>ack('好，出发时间保持不变。')}] };
+  }
+  if(/(下雨|天气|降温|带伞|冷)/.test(t)){
+    const wx=ap.plan.weather;
+    return { html:`演出当天 ${wx.temp} · ${wx.cond}，降雨概率 ${wx.rain}%，晚间体感 ${wx.night}。我已经帮你：${wx.adjustments.map(a=>a.txt).join('、')}。`, actions:[{label:'去计划页看 →',cb:()=>switchView('plan'),primary:true}] };
+  }
+  return null;
+}
+function reply(t){
+  const pi=planIntent(t);
+  if(pi){ pushBot(pi.html); showActions(pi.actions); return; }
+  const hit=CONCERTS.find(c=>t.includes(c.artist));
+  if(hit){
+    state.activeConcert=hit;
+    pushBot(`找到啦～ ${hit.artist} 在 ${hit.city} 的 ${hit.venue}（${hit.date}）👇 要不要去挑个座位？`);
+    showAction('去选座 →', ()=>switchView('detail'));
+    return;
+  }
+  if(/(选座|座位|位置|坐哪)/.test(t)){ pushBot('好呀，走，我帮你挑个最合适的座位 👇'); showAction('去选座 →', ()=>switchView('detail')); return; }
+  if(/(酒店|住宿|住哪|订房)/.test(t)){ askHotelPath(); return; }
+  if(/(安检|能带|带什么|不能带)/.test(t)){ pushBot('安检这里有几样东西要注意 👇 大型灯牌和自拍杆别带哦。'); showAction('去详情看 →', ()=>openDetail('host','security')); return; }
+  if(/(应援|飘带|灯牌|手幅)/.test(t)){ pushBot('应援这块有讲究 👇 颜色按官方应援色、尺寸别挡后排、散场带走。'); showAction('去详情看 →', ()=>openDetail('host','ribbon')); return; }
+  if(/(计划|规划|行程|我的计划)/.test(t)){ const ap=activePlan(); if(ap){ pushBot('这是你的观演计划 👇'); showAction('打开计划 →', ()=>switchView('plan')); return; } }
+  if(/(推荐|想看|有什么|看看)/.test(t)){ pushBot('这就把适合你的演出排出来 👇'); showActionPlusChips('打开推荐 →', ()=>switchView('home'), ['还有其他想看的吗'], onChatChip); return; }
+  pushBot('收到啦～ 我可以帮你：找演出、选座位、查酒店、看安检、生成并调整观演计划。你想先来哪个？✨');
+  showChatChips();
+}
+
+/* ================= Agent Drawer ================= */
+function openAgentDrawer(c){
+  const ov=el('div','drawer-overlay');
+  const d=el('div','drawer');
+  d.innerHTML=`<div class="drawer-head"><span style="font-size:20px">✨</span><span>小星 · 一起调整计划</span><button class="drawer-x" id="adX">✕</button></div>`;
+  const body=el('div','drawer-body agent-chat');
+  const msgs=el('div','agent-msgs');
+  const input=el('div','cinput');
+  const inp=el('input'); inp.placeholder='如：我想晚一点出发 / 帮我换个便宜酒店';
+  const sbtn=el('button','','➤');
+  input.appendChild(inp); input.appendChild(sbtn);
+  body.appendChild(msgs); body.appendChild(input);
+  d.appendChild(body); ov.appendChild(d);
+  document.body.appendChild(ov);
+  $('#adX').onclick=()=>ov.remove();
+  ov.onclick=e=>{ if(e.target===ov) ov.remove(); };
+  msgs.appendChild(el('div','abot','✨ 我是小星。计划有变化就告诉我：<br>· 我已经订好酒店了<br>· 我想晚一点出发<br>· 帮我换个便宜一点的酒店<br>· 散场后想吃火锅<br>· 我当天坐高铁回去<br>· 这次不用住酒店'));
+  const send=()=>{
+    const t=inp.value.trim(); if(!t) return; inp.value='';
+    msgs.appendChild(el('div','auser',t));
+    const res=planIntent(t);
+    if(res){
+      msgs.appendChild(el('div','abot',res.html));
+      const row=el('div','action-row');
+      res.actions.forEach(a=>{ const b=el('button', a.primary?'btn-big':'btn-big ghost', a.label); b.onclick=()=>{ ov.remove(); a.cb(); }; row.appendChild(b); });
+      msgs.appendChild(row);
+    } else {
+      msgs.appendChild(el('div','abot','我可以帮你调整：晚点出发、加个火锅、换酒店、当天往返、登记抢到的票。也可以直接打开完整计划 👇'));
+      const row=el('div','action-row');
+      const b=el('button','btn-big','打开计划页 →'); b.onclick=()=>{ ov.remove(); switchView('plan'); }; row.appendChild(b);
+      msgs.appendChild(row);
+    }
+    msgs.scrollTop=msgs.scrollHeight;
+  };
+  sbtn.onclick=send; inp.onkeydown=e=>{ if(e.key==='Enter') send(); };
+}
+
+/* ================= 复制 ================= */
+function copyText(txt, btn){
+  const done=()=>{ btn.textContent='已复制 ✓'; btn.style.background='var(--mint)'; setTimeout(()=>{ btn.textContent='复制'; btn.style.background=''; },1400); };
+  if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(done).catch(()=>fallback(txt,done)); }
+  else fallback(txt,done);
+}
+function fallback(txt, done){
+  const ta=document.createElement('textarea'); ta.value=txt; ta.style.position='fixed'; ta.style.opacity='0';
+  document.body.appendChild(ta); ta.select();
+  try{ document.execCommand('copy'); }catch(e){}
+  document.body.removeChild(ta); done();
+}
+
+/* ================= 提示 ================= */
+function toast(msg){
+  const t=el('div','toast',msg);
+  document.body.appendChild(t);
+  setTimeout(()=>{ t.remove(); }, 4600);
+}
+
+/* ================= 重置 Demo ================= */
+function openResetModal(){
+  const m=el('div','overlay');
+  const box=el('div','modal');
+  box.innerHTML=`<h3>↻ 重置 Demo</h3><div class="msub">将恢复 StarShow 默认演示数据，你刚才的操作会被清除。</div><div class="modal-cta"><button class="btn-big" id="rstYes">恢复默认 Demo</button><button class="btn-ghost" id="rstNo">取消</button></div>`;
+  m.appendChild(box); document.body.appendChild(m);
+  box.querySelector('#rstYes').onclick=()=>resetDemo();
+  box.querySelector('#rstNo').onclick=()=>closeOverlay();
+  m.onclick=e=>{ if(e.target===m) closeOverlay(); };
+}
+function resetDemo(){
+  try { localStorage.removeItem(LS_KEY); } catch(e){}
+  chatLog = [];
+  communityMsgs = null;
+  seedState();
+  if(profile) state.prefLabel = profile.pref;
+  state.view='home'; state.activeConcert=null; state.detailTab='seat'; state.planStage='prep'; state.editing=false; state.planNode=null; state.journeySel=null;
+  closeOverlay();
+  renderTabs(); renderMain();
+  toast('✨ 已恢复默认演示');
+}
+
+/* ================= 启动 ================= */
+(function init(){
+  const had = loadState();
+  if(!had){ seedState(); }
+  if(profile) state.prefLabel = profile.pref;
+  state.view = profileDone() ? 'chat' : 'home';
+  renderTabs();
+  renderMain();
+  const rb=$('#resetBtn'); if(rb) rb.onclick=openResetModal;
+})();
+</script>
+</body>
+</html>
