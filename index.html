@@ -328,6 +328,10 @@
   .modal .msub { color: var(--ink-soft); font-size: 13px; margin-bottom: 18px; line-height: 1.6; }
   .modal-lab { font-size: 12px; font-weight: 800; color: var(--ink-soft); margin-bottom: 10px; }
   .modal-cta { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
+  .guide-steps { display: flex; flex-direction: column; gap: 11px; margin: 4px 0 2px; }
+  .guide-steps .gs { display: flex; align-items: flex-start; gap: 11px; font-size: 13.5px; line-height: 1.55; color: var(--ink); }
+  .guide-steps .gn { flex: none; width: 22px; height: 22px; border-radius: 50%; background: linear-gradient(135deg, var(--pink), var(--violet)); color: #fff; font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
+  .guide-steps .gs b { color: var(--violet); }
 
   .drawer-overlay { position: fixed; inset: 0; background: rgba(58,46,69,.30); z-index: 300; display: flex; justify-content: flex-end; animation: fade .2s ease; }
   .drawer { width: min(430px, 94vw); height: 100%; background: #fff; box-shadow: -18px 0 50px rgba(58,46,69,.22); display: flex; flex-direction: column; animation: slide .28s ease; }
@@ -509,6 +513,7 @@
         <div class="s">每一次出发，都是为了见想见的人。</div>
       </div>
       <span class="demo-badge">高保真原型 · 示例数据</span>
+      <button class="reset-btn" id="guideBtn">🎯 怎么用</button>
       <button class="reset-btn" id="resetBtn">↻ 重置 Demo</button>
       <div class="tabs" id="tabs"></div>
     </header>
@@ -2633,6 +2638,24 @@ function resetDemo(){
   toast('✨ 已恢复默认演示');
 }
 
+/* ================= 首次引导 ================= */
+function showGuide(){
+  const m=el('div','overlay');
+  const box=el('div','modal');
+  box.innerHTML=`<h3>🎯 怎么体验这个 Demo</h3><div class="msub">这是一个<strong>可点的高保真原型</strong>，数据已预填。跟着 4 步走一遍，约 1 分钟看懂它。</div>
+    <div class="guide-steps">
+      <div class="gs"><span class="gn">1</span><span>点顶部「<b>🏠 我的主页</b>」→ 看为你推荐的演出</span></div>
+      <div class="gs"><span class="gn">2</span><span>点任意一张演出卡 → 试试「<b>💺 选座建议</b>」</span></div>
+      <div class="gs"><span class="gn">3</span><span>点「<b>继续计划 →</b>」→ 看四阶段观演计划</span></div>
+      <div class="gs"><span class="gn">4</span><span>回「<b>💬 AI</b>」→ 打字「换个便宜酒店」看它改计划</span></div>
+    </div>
+    <div class="modal-cta"><button class="btn-big" id="guideGo">开始体验 ✨</button></div>`;
+  m.appendChild(box); document.body.appendChild(m);
+  const done=()=>{ closeOverlay(); try{ localStorage.setItem('starshows_guide','1'); }catch(e){} };
+  box.querySelector('#guideGo').onclick=done;
+  m.onclick=e=>{ if(e.target===m) done(); };
+}
+
 /* ================= 启动 ================= */
 (function init(){
   const had = loadState();
@@ -2642,6 +2665,9 @@ function resetDemo(){
   renderTabs();
   renderMain();
   const rb=$('#resetBtn'); if(rb) rb.onclick=openResetModal;
+  const gb=$('#guideBtn'); if(gb) gb.onclick=showGuide;
+  let seen=false; try{ seen=localStorage.getItem('starshows_guide')==='1'; }catch(e){}
+  if(!seen) showGuide();
 })();
 </script>
 </body>
