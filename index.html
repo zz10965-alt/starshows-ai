@@ -2360,7 +2360,7 @@ function showAction(label, cb){ chatUI.chips = defaultChips(); chatUI.action={la
 function showActions(actions){ chatUI.chips = defaultChips(); chatUI.action=null; chatUI.actions=actions; renderTail(); }
 function showActionPlusChips(actionLabel, actionCb, chipOpts, chipCb){
   chatUI.action = {label:actionLabel, cb:actionCb};
-  chatUI.chips = chipOpts.map(o=>({label:o, cb:chipCb}));
+  chatUI.chips = chipOpts.map(o=>({label:o, cb:chipCb})).concat(defaultChips());
   chatUI.actions = null;
   renderTail();
 }
